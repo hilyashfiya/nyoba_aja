@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Peta Sederhana</title>
+    <title>Peta dari Google Sheets</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -10,8 +10,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        body { margin: 0; }
-        #map { height: 100vh; }
+        #map {
+            height: 100vh;
+        }
     </style>
 </head>
 <body>
@@ -19,52 +20,36 @@
 <div id="map"></div>
 
 <script>
+// 🔥 GANTI LINK INI DENGAN CSV KAMU
+const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=227041905&single=true&output=csv";
 
-// ================= MAP =================
-var map = L.map('map').setView([-6.9, 107.6], 9);
+const map = L.map('map').setView([-6.9, 107.6], 10);
 
-// BASEMAP
-var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-osm.addTo(map);
+// Basemap ESRI
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri'
+}).addTo(map);
 
-// ================= RADIUS RESPONSIVE =================
-function getRadius(){
-    if (window.innerWidth < 600) {
-        return 6;   // HP (lebih besar biar mudah diklik)
-    } else if (window.innerWidth < 1024) {
-        return 5;   // Tablet
-    } else {
-        return 4;   // Laptop / Desktop
-    }
-}
+// Ambil data CSV
+fetch(csvUrl)
+  .then(response => response.text())
+  .then(data => {
+      const rows = data.split("\n").slice(1);
 
-// ================= LOAD DATA =================
-fetch("data.geojson") // ganti dengan nama file kamu
-.then(res => res.json())
-.then(data => {
+      rows.forEach(row => {
+          const cols = row.split(",");
 
-    L.geoJSON(data, {
-        pointToLayer: function(feature, latlng) {
-            return L.circleMarker(latlng, {
-                radius: getRadius(),
-                fillColor: "#ff0000",
-                color: "transparent",
-                weight: 0,
-                fillOpacity: 1
-            });
-        },
-        onEachFeature: function(feature, layer) {
-            let p = feature.properties;
+          const lat = parseFloat(cols[0]); // kolom latitude
+          const lng = parseFloat(cols[1]); // kolom longitude
+          const nama = cols[2]; // kolom nama (opsional)
 
-            layer.bindPopup(`
-                <b>Nama:</b> ${p.Nama || '-'}<br>
-                <b>Keterangan:</b> ${p.Keterangan || '-'}
-            `);
-        }
-    }).addTo(map);
-
-});
-
+          if (!isNaN(lat) && !isNaN(lng)) {
+              L.marker([lat, lng])
+                .addTo(map)
+                .bindPopup(nama || "Lokasi");
+          }
+      });
+  });
 </script>
 
 </body>
