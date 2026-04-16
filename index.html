@@ -5,16 +5,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Leaflet CSS -->
+    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+    <!-- PapaParse (biar CSV kebaca rapi) -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
     <style>
-        #map {
-            height: 100vh;
-        }
+        #map { height: 100vh; }
     </style>
 </head>
 <body>
@@ -31,51 +30,46 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
     attribution: 'Tiles © Esri'
 }).addTo(map);
 
-// Ambil data CSV
-fetch(csvUrl)
-  .then(res => res.text())
-  .then(data => {
+// 🔥 Parse CSV berdasarkan HEADER
+Papa.parse(csvUrl, {
+    download: true,
+    header: true, // ini kunci utama
+    skipEmptyLines: true,
+    complete: function(results) {
 
-      const rows = data.trim().split("\n");
+        console.log("DATA PARSED:", results.data);
 
-      const header = rows[0]
-        .split(",")
-        .map(h => h.replace(/"/g, "").trim().toLowerCase());
+        results.data.forEach(row => {
 
-      console.log("HEADER:", header);
+            // 🔥 ambil berdasarkan NAMA KOLOM (bukan index)
+            let lng = row["Titik Koordinat (X)"];
+            let lat = row["Titik Koordinat (Y)"];
 
-      const xIndex = header.findIndex(h => h.includes("x"));
-      const yIndex = header.findIndex(h => h.includes("y"));
+            if (!lng || !lat) return;
 
-      console.log("INDEX:", xIndex, yIndex);
+            // bersihkan format
+            lng = parseFloat(lng.toString().replace(",", "."));
+            lat = parseFloat(lat.toString().replace(",", "."));
 
-      rows.slice(1).forEach(row => {
-          const cols = row.split(",");
+            console.log("COORD:", lat, lng);
 
-          let lng = cols[xIndex]?.replace(/"/g, "").trim();
-          let lat = cols[yIndex]?.replace(/"/g, "").trim();
-
-          // 🔥 handle koma dan titik
-          lng = parseFloat(lng.replace(",", "."));
-          lat = parseFloat(lat.replace(",", "."));
-
-          console.log("DATA:", lat, lng);
-
-          if (!isNaN(lat) && !isNaN(lng)) {
-
-              // 🔥 PAKAI CIRCLE MARKER (RADIUS 6, PINK)
-              L.circleMarker([lat, lng], {
-                  radius: 6,
-                  color: "pink",
-                  fillColor: "pink",
-                  fillOpacity: 0.8
-              })
-              .addTo(map)
-              .bindPopup(`Lat: ${lat}<br>Lng: ${lng}`);
-          }
-      });
-  })
-  .catch(err => console.error("ERROR:", err));
+            if (!isNaN(lat) && !isNaN(lng)) {
+                L.circleMarker([lat, lng], {
+                    radius: 6,
+                    color: "pink",
+                    fillColor: "pink",
+                    fillOpacity: 0.8
+                })
+                .addTo(map)
+                .bindPopup(`
+                    <b>Koordinat</b><br>
+                    Lat: ${lat}<br>
+                    Lng: ${lng}
+                `);
+            }
+        });
+    }
+});
 </script>
 
 </body>
