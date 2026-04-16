@@ -1,3 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Peta dari Google Sheets</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- ✅ Leaflet WAJIB -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        #map {
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
 <script>
 const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv";
 
@@ -12,35 +33,17 @@ fetch(csvUrl)
   .then(res => res.text())
   .then(data => {
 
-      console.log("RAW DATA:", data); // 🔥 DEBUG
-
-      // 🔥 CEK kalau ternyata bukan CSV
-      if (data.startsWith("<")) {
-          alert("Data bukan CSV! Cek publish Google Sheets");
-          return;
-      }
-
       const rows = data.trim().split("\n");
-
-      // 🔥 header dibersihkan dari tanda kutip
       const header = rows[0].split(",").map(h => h.replace(/"/g, "").trim());
 
-      console.log("HEADER:", header);
-
-      // 🔥 cari kolom X dan Y secara fleksibel
       const xIndex = header.findIndex(h => h.toLowerCase().includes("x"));
       const yIndex = header.findIndex(h => h.toLowerCase().includes("y"));
-
-      console.log("INDEX:", xIndex, yIndex);
 
       rows.slice(1).forEach(row => {
           const cols = row.split(",");
 
-          // 🔥 bersihkan data dari tanda kutip
           const lng = parseFloat(cols[xIndex]?.replace(/"/g, "").trim());
           const lat = parseFloat(cols[yIndex]?.replace(/"/g, "").trim());
-
-          console.log(lat, lng);
 
           if (!isNaN(lat) && !isNaN(lng)) {
               L.marker([lat, lng])
@@ -48,6 +51,8 @@ fetch(csvUrl)
                 .bindPopup(`Lat: ${lat}<br>Lng: ${lng}`);
           }
       });
-  })
-  .catch(err => console.error("ERROR:", err));
+  });
 </script>
+
+</body>
+</html>
