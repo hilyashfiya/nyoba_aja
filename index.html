@@ -1,5 +1,4 @@
 <script>
-// 🔥 GANTI DENGAN LINK CSV KAMU
 const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv";
 
 const map = L.map('map').setView([-6.9, 107.6], 10);
@@ -9,22 +8,39 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
     attribution: 'Tiles © Esri'
 }).addTo(map);
 
-// Ambil data CSV
 fetch(csvUrl)
-  .then(response => response.text())
+  .then(res => res.text())
   .then(data => {
-      const rows = data.split("\n");
-      const header = rows[0].split(",");
 
-      // 🔍 Cari index kolom berdasarkan nama
-      const xIndex = header.indexOf("Titik Koordinat (X)");
-      const yIndex = header.indexOf("Titik Koordinat (Y)");
+      console.log("RAW DATA:", data); // 🔥 DEBUG
+
+      // 🔥 CEK kalau ternyata bukan CSV
+      if (data.startsWith("<")) {
+          alert("Data bukan CSV! Cek publish Google Sheets");
+          return;
+      }
+
+      const rows = data.trim().split("\n");
+
+      // 🔥 header dibersihkan dari tanda kutip
+      const header = rows[0].split(",").map(h => h.replace(/"/g, "").trim());
+
+      console.log("HEADER:", header);
+
+      // 🔥 cari kolom X dan Y secara fleksibel
+      const xIndex = header.findIndex(h => h.toLowerCase().includes("x"));
+      const yIndex = header.findIndex(h => h.toLowerCase().includes("y"));
+
+      console.log("INDEX:", xIndex, yIndex);
 
       rows.slice(1).forEach(row => {
           const cols = row.split(",");
 
-          const lng = parseFloat(cols[xIndex]); // X = longitude
-          const lat = parseFloat(cols[yIndex]); // Y = latitude
+          // 🔥 bersihkan data dari tanda kutip
+          const lng = parseFloat(cols[xIndex]?.replace(/"/g, "").trim());
+          const lat = parseFloat(cols[yIndex]?.replace(/"/g, "").trim());
+
+          console.log(lat, lng);
 
           if (!isNaN(lat) && !isNaN(lng)) {
               L.marker([lat, lng])
@@ -32,5 +48,6 @@ fetch(csvUrl)
                 .bindPopup(`Lat: ${lat}<br>Lng: ${lng}`);
           }
       });
-  });
+  })
+  .catch(err => console.error("ERROR:", err));
 </script>
