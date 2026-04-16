@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Peta dari Google Sheets</title>
+    <title>WebGIS Data Jawa Barat</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -13,7 +13,9 @@
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
     <style>
-        #map { height: 100vh; }
+        #map {
+            height: 100vh;
+        }
     </style>
 </head>
 <body>
@@ -21,57 +23,73 @@
 <div id="map"></div>
 
 <script>
+// 🔥 LINK CSV KAMU
 const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv";
 
-const map = L.map('map').setView([-6.9, 107.6], 9);
+// Inisialisasi map
+const map = L.map('map').setView([-6.9, 107.6], 8);
 
 // Basemap ESRI
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles © Esri'
 }).addTo(map);
 
+// 🔥 Untuk auto zoom
+const bounds = [];
+
 // Parse CSV
 Papa.parse(csvUrl, {
     download: true,
     header: true,
     skipEmptyLines: true,
+
     complete: function(results) {
 
-        console.log("DATA PARSED:", results.data);
+        console.log("DATA:", results.data);
 
-        results.data.forEach(row => {
+        results.data.forEach((row, i) => {
 
-            // 🔥 SESUAIKAN DENGAN FIELD KAMU (huruf kecil x)
+            // 🔥 Ambil field koordinat (sesuai punyamu)
             let lng = row["Titik Koordinat (x)"];
             let lat = row["Titik Koordinat (Y)"];
 
             if (!lng || !lat) return;
 
-            // bersihkan format
-            lng = parseFloat(lng.toString().replace(",", "."));
-            lat = parseFloat(lat.toString().replace(",", "."));
+            // Bersihkan data
+            lng = parseFloat(lng.toString().replace(",", ".").trim());
+            lat = parseFloat(lat.toString().replace(",", ".").trim());
 
             console.log("COORD:", lat, lng);
 
             if (!isNaN(lat) && !isNaN(lng)) {
 
+                // 🔥 Marker jelas
                 L.circleMarker([lat, lng], {
-                    radius: 6,
-                    color: "pink",
-                    fillColor: "pink",
-                    fillOpacity: 0.8
+                    radius: 8,
+                    color: "#ff1493",
+                    fillColor: "#ff69b4",
+                    fillOpacity: 1,
+                    weight: 2
                 })
                 .addTo(map)
                 .bindPopup(`
-                    <b>Unit:</b> ${row["Unit Kerja"]}<br>
+                    <b>Unit Kerja:</b> ${row["Unit Kerja"]}<br>
                     <b>Kab/Kota:</b> ${row["Kabupaten/Kota"]}<br>
                     <b>Kecamatan:</b> ${row["Kecamatan"]}<br>
                     <b>Desa:</b> ${row["Desa/Kelurahan"]}<br>
+                    <b>DAS:</b> ${row["DAS"]}<br>
                     <b>Koordinat:</b><br>
                     ${lat}, ${lng}
                 `);
+
+                bounds.push([lat, lng]);
             }
         });
+
+        // 🔥 AUTO ZOOM (INI KUNCI BIAR KELIHATAN)
+        if (bounds.length > 0) {
+            map.fitBounds(bounds);
+        }
     }
 });
 </script>
