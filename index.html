@@ -36,26 +36,16 @@ fetch(csvUrl)
   .then(res => res.text())
   .then(data => {
 
-      console.log("RAW DATA:", data);
-
-      // Cek apakah bukan CSV
-      if (data.startsWith("<")) {
-          alert("Data bukan CSV! Cek publish Google Sheets");
-          return;
-      }
-
       const rows = data.trim().split("\n");
 
-      // Bersihkan header
       const header = rows[0]
         .split(",")
         .map(h => h.replace(/"/g, "").trim().toLowerCase());
 
       console.log("HEADER:", header);
 
-      // Ambil kolom X dan Y
-      const xIndex = header.findIndex(h => h.includes("titik koordinat (x)"));
-      const yIndex = header.findIndex(h => h.includes("titik koordinat (y)"));
+      const xIndex = header.findIndex(h => h.includes("x"));
+      const yIndex = header.findIndex(h => h.includes("y"));
 
       console.log("INDEX:", xIndex, yIndex);
 
@@ -65,16 +55,23 @@ fetch(csvUrl)
           let lng = cols[xIndex]?.replace(/"/g, "").trim();
           let lat = cols[yIndex]?.replace(/"/g, "").trim();
 
-          // Handle koma jadi titik
+          // 🔥 handle koma dan titik
           lng = parseFloat(lng.replace(",", "."));
           lat = parseFloat(lat.replace(",", "."));
 
           console.log("DATA:", lat, lng);
 
           if (!isNaN(lat) && !isNaN(lng)) {
-              L.marker([lat, lng])
-                .addTo(map)
-                .bindPopup(`Lat: ${lat}<br>Lng: ${lng}`);
+
+              // 🔥 PAKAI CIRCLE MARKER (RADIUS 6, PINK)
+              L.circleMarker([lat, lng], {
+                  radius: 6,
+                  color: "pink",
+                  fillColor: "pink",
+                  fillOpacity: 0.8
+              })
+              .addTo(map)
+              .bindPopup(`Lat: ${lat}<br>Lng: ${lng}`);
           }
       });
   })
