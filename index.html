@@ -5,8 +5,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- ✅ Leaflet WAJIB -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
@@ -29,21 +31,45 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
     attribution: 'Tiles © Esri'
 }).addTo(map);
 
+// Ambil data CSV
 fetch(csvUrl)
   .then(res => res.text())
   .then(data => {
 
-      const rows = data.trim().split("\n");
-      const header = rows[0].split(",").map(h => h.replace(/"/g, "").trim());
+      console.log("RAW DATA:", data);
 
-      const xIndex = header.findIndex(h => h.toLowerCase().includes("x"));
-      const yIndex = header.findIndex(h => h.toLowerCase().includes("y"));
+      // Cek apakah bukan CSV
+      if (data.startsWith("<")) {
+          alert("Data bukan CSV! Cek publish Google Sheets");
+          return;
+      }
+
+      const rows = data.trim().split("\n");
+
+      // Bersihkan header
+      const header = rows[0]
+        .split(",")
+        .map(h => h.replace(/"/g, "").trim().toLowerCase());
+
+      console.log("HEADER:", header);
+
+      // Ambil kolom X dan Y
+      const xIndex = header.findIndex(h => h.includes("titik koordinat (x)"));
+      const yIndex = header.findIndex(h => h.includes("titik koordinat (y)"));
+
+      console.log("INDEX:", xIndex, yIndex);
 
       rows.slice(1).forEach(row => {
           const cols = row.split(",");
 
-          const lng = parseFloat(cols[xIndex]?.replace(/"/g, "").trim());
-          const lat = parseFloat(cols[yIndex]?.replace(/"/g, "").trim());
+          let lng = cols[xIndex]?.replace(/"/g, "").trim();
+          let lat = cols[yIndex]?.replace(/"/g, "").trim();
+
+          // Handle koma jadi titik
+          lng = parseFloat(lng.replace(",", "."));
+          lat = parseFloat(lat.replace(",", "."));
+
+          console.log("DATA:", lat, lng);
 
           if (!isNaN(lat) && !isNaN(lng)) {
               L.marker([lat, lng])
@@ -51,7 +77,8 @@ fetch(csvUrl)
                 .bindPopup(`Lat: ${lat}<br>Lng: ${lng}`);
           }
       });
-  });
+  })
+  .catch(err => console.error("ERROR:", err));
 </script>
 
 </body>
