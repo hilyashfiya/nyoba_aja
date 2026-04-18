@@ -13,13 +13,7 @@
 <style>
 html, body {margin:0; padding:0;}
 #map {height:100vh;}
-.legend {
-    background:white;
-    padding:10px;
-    border-radius:8px;
-    box-shadow:0 0 10px rgba(0,0,0,0.2);
-    font-size:14px;
-}
+
 .title {
     position:absolute;
     top:10px;
@@ -31,6 +25,14 @@ html, body {margin:0; padding:0;}
     font-weight:bold;
     z-index:999;
     box-shadow:0 2px 10px rgba(0,0,0,0.2);
+}
+
+.legend {
+    background:white;
+    padding:10px;
+    border-radius:8px;
+    box-shadow:0 0 10px rgba(0,0,0,0.2);
+    font-size:13px;
 }
 </style>
 </head>
@@ -60,25 +62,33 @@ L.control.layers({
     "ESRI": esri
 }).addTo(map);
 
-// ================= ICON RESPONSIVE =================
+// ================= ICON SUPER KECIL =================
 function getIconSize() {
     const zoom = map.getZoom();
-    if (zoom <= 8) return 16;
-    if (zoom <= 10) return 20;
-    if (zoom <= 12) return 24;
-    if (zoom <= 14) return 28;
-    return 32;
+
+    if (zoom <= 8) return 10;
+    if (zoom <= 10) return 12;
+    if (zoom <= 12) return 14;
+    if (zoom <= 14) return 16;
+    return 18;
 }
 
 function createIcon(emoji) {
     const size = getIconSize();
+
     return L.divIcon({
-        html: `<div style="font-size:${size}px;transform:translate(-50%,-50%);opacity:0.9">${emoji}</div>`,
+        html: `<div style="
+            font-size:${size}px;
+            transform: translate(-50%, -50%);
+            opacity:0.85;
+        ">${emoji}</div>`,
         className: '',
-        iconSize: [size, size]
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2]
     });
 }
 
+// INIT ICON
 let iconPJL = createIcon("🧑‍🌾");
 let iconPersemaian = createIcon("🌱");
 let iconPegawai = createIcon("🧑‍💼");
@@ -92,6 +102,7 @@ const layerJumat = L.layerGroup().addTo(map);
 
 // ================= UPDATE ICON SAAT ZOOM =================
 map.on("zoomend", function () {
+
     iconPJL = createIcon("🧑‍🌾");
     iconPersemaian = createIcon("🌱");
     iconPegawai = createIcon("🧑‍💼");
@@ -101,6 +112,7 @@ map.on("zoomend", function () {
     layerPersemaian.eachLayer(l => l.setIcon(iconPersemaian));
     layerPegawai.eachLayer(l => l.setIcon(iconPegawai));
     layerJumat.eachLayer(l => l.setIcon(iconJumat));
+
 });
 
 // ================= HELPER =================
@@ -110,6 +122,7 @@ function safe(val) {
 
 function toFloat(val) {
     if (!val) return null;
+
     return parseFloat(
         val.toString()
         .replace(",", ".")
@@ -133,10 +146,13 @@ function loadCSV(url, type) {
 
             const data = res.data;
 
+            // ================= PJL =================
             if(type==="pjl"){
+
                 const grouped = {};
 
                 data.forEach(r=>{
+
                     const lat = toFloat(r["Titik Koordinat Penanaman (Y)"]);
                     const lng = toFloat(r["Titik Koordinat Penanaman (X)"]);
                     const penyuluh = safe(r["Penyuluh Kehutanan"]);
@@ -150,6 +166,7 @@ function loadCSV(url, type) {
                 });
 
                 Object.values(grouped).forEach(group=>{
+
                     const r = group[0];
                     const lat = toFloat(r["Titik Koordinat Penanaman (Y)"]);
                     const lng = toFloat(r["Titik Koordinat Penanaman (X)"]);
@@ -157,9 +174,10 @@ function loadCSV(url, type) {
                     let html = `<b>Penyuluh:</b> ${safe(r["Penyuluh Kehutanan"])}<hr>`;
 
                     group.forEach(g=>{
-                        html += `<b>Nama:</b> ${safe(g["Nama Lengkap"])}<br>
-                                 <b>Unit:</b> ${safe(g["Unit Kerja"])}<br>
-                                 <b>Kawasan:</b> ${safe(g["Kawasan Leuweung/ Gunung"])}<hr>`;
+                        html += `
+                        <b>Nama:</b> ${safe(g["Nama Lengkap"])}<br>
+                        <b>Unit:</b> ${safe(g["Unit Kerja"])}<br>
+                        <b>Kawasan:</b> ${safe(g["Kawasan Leuweung/ Gunung"])}<hr>`;
                     });
 
                     html += `<a href="${gmaps(lat,lng)}" target="_blank">📍 Google Maps</a>`;
@@ -170,28 +188,37 @@ function loadCSV(url, type) {
                 });
             }
 
+            // ================= PERSEMAIAN =================
             if(type==="persemaian"){
+
                 data.forEach(r=>{
+
                     const lat = toFloat(r["latitude"]);
                     const lng = toFloat(r["longitude"]);
-                    if(!lat || !lng || isNaN(lat)) return;
+
+                    if(!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
                     L.marker([lat,lng],{icon:iconPersemaian})
                         .addTo(layerPersemaian)
                         .bindPopup(`
                         <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                        <b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
                         <b>Status:</b> ${safe(r["Status Persemaian"])}<br>
-                        <b>Koordinat:</b> ${lat},${lng}<br>
+                        <b>Koordinat:</b> ${lat}, ${lng}<br>
                         <a href="${gmaps(lat,lng)}" target="_blank">📍 Maps</a>
                         `);
                 });
             }
 
+            // ================= PEGAWAI =================
             if(type==="pegawai"){
+
                 data.forEach(r=>{
+
                     const lat = toFloat(r["latitude"]);
                     const lng = toFloat(r["longitude"]);
-                    if(!lat || !lng || isNaN(lat)) return;
+
+                    if(!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
                     L.marker([lat,lng],{icon:iconPegawai})
                         .addTo(layerPegawai)
@@ -199,17 +226,21 @@ function loadCSV(url, type) {
                         <b>Nama:</b> ${safe(r["Nama"])}<br>
                         <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
                         <b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
-                        <b>Koordinat:</b> ${lat},${lng}<br>
+                        <b>Koordinat:</b> ${lat}, ${lng}<br>
                         <a href="${gmaps(lat,lng)}" target="_blank">📍 Maps</a>
                         `);
                 });
             }
 
+            // ================= JUMAT MENANAM =================
             if(type==="jumat"){
+
                 data.forEach(r=>{
+
                     const lat = toFloat(r["Titik Koordinat (Y)"]);
                     const lng = toFloat(r["Titik Koordinat (x)"]);
-                    if(!lat || !lng || isNaN(lat)) return;
+
+                    if(!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
                     L.marker([lat,lng],{icon:iconJumat})
                         .addTo(layerJumat)
@@ -217,7 +248,7 @@ function loadCSV(url, type) {
                         <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
                         <b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
                         <b>Luas:</b> ${safe(r["Luas Rencana Penanaman  (Ha)"])} Ha<br>
-                        <b>Koordinat:</b> ${lat},${lng}<br>
+                        <b>Koordinat:</b> ${lat}, ${lng}<br>
                         <a href="${gmaps(lat,lng)}" target="_blank">📍 Maps</a>
                         `);
                 });
@@ -245,10 +276,10 @@ loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_P
 loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&single=true&output=csv`,"persemaian");
 });
 
-// Pegawai
+// PEGAWAI
 loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv","pegawai");
 
-// Jumat
+// JUMAT
 loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv","jumat");
 
 // ================= LEGEND =================
