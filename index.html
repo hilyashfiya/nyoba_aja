@@ -1,43 +1,38 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Monitoring Domisili Pegawai dan Program Unggulan</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoring Domisili Pegawai dan Program Unggulan</title>
 
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-    <!-- PapaParse -->
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
-    <style>
-        body { margin:0; font-family:Arial; }
-        #map { height:100vh; }
-
-        .title {
-            position:absolute;
-            top:10px;
-            left:50%;
-            transform:translateX(-50%);
-            background:white;
-            padding:10px 20px;
-            border-radius:8px;
-            font-weight:bold;
-            z-index:1000;
-            box-shadow:0 2px 6px rgba(0,0,0,0.3);
-        }
-
-        .legend {
-            background:white;
-            padding:10px;
-            border-radius:8px;
-            line-height:1.5;
-            box-shadow:0 2px 6px rgba(0,0,0,0.3);
-        }
-    </style>
+<style>
+html, body {margin:0; padding:0;}
+#map {height:100vh;}
+.legend {
+    background:white;
+    padding:10px;
+    border-radius:8px;
+    box-shadow:0 0 10px rgba(0,0,0,0.2);
+    font-size:14px;
+}
+.title {
+    position:absolute;
+    top:10px;
+    left:50%;
+    transform:translateX(-50%);
+    background:white;
+    padding:10px 20px;
+    border-radius:10px;
+    font-weight:bold;
+    z-index:999;
+    box-shadow:0 2px 10px rgba(0,0,0,0.2);
+}
+</style>
 </head>
 
 <body>
@@ -46,25 +41,6 @@
 <div id="map"></div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-
-// ================= CONFIG =================
-const isMobile = window.innerWidth < 768;
-const iconSize = isMobile ? 25 : 35;
-
-// ICON
-function createIcon(emoji) {
-    return L.divIcon({
-        html: `<div style="font-size:${iconSize}px">${emoji}</div>`,
-        className: '',
-        iconSize: [iconSize, iconSize]
-    });
-}
-
-const iconPJL = createIcon("🧑‍🌾");
-const iconPersemaian = createIcon("🌱");
-const iconPegawai = createIcon("🧑‍💼");
-const iconJumat = createIcon("📍");
 
 // ================= MAP =================
 const map = L.map('map').setView([-6.9, 107.6], 8);
@@ -79,10 +55,34 @@ osm.addTo(map);
 
 L.control.layers({
     "OSM": osm,
-    "Topografi": topo,
+    "Medan": topo,
     "Satelit": satelit,
     "ESRI": esri
 }).addTo(map);
+
+// ================= ICON RESPONSIVE =================
+function getIconSize() {
+    const zoom = map.getZoom();
+    if (zoom <= 8) return 16;
+    if (zoom <= 10) return 20;
+    if (zoom <= 12) return 24;
+    if (zoom <= 14) return 28;
+    return 32;
+}
+
+function createIcon(emoji) {
+    const size = getIconSize();
+    return L.divIcon({
+        html: `<div style="font-size:${size}px;transform:translate(-50%,-50%);opacity:0.9">${emoji}</div>`,
+        className: '',
+        iconSize: [size, size]
+    });
+}
+
+let iconPJL = createIcon("🧑‍🌾");
+let iconPersemaian = createIcon("🌱");
+let iconPegawai = createIcon("🧑‍💼");
+let iconJumat = createIcon("📍");
 
 // ================= LAYER =================
 const layerPJL = L.layerGroup().addTo(map);
@@ -90,7 +90,18 @@ const layerPersemaian = L.layerGroup().addTo(map);
 const layerPegawai = L.layerGroup().addTo(map);
 const layerJumat = L.layerGroup().addTo(map);
 
-const bounds = [];
+// ================= UPDATE ICON SAAT ZOOM =================
+map.on("zoomend", function () {
+    iconPJL = createIcon("🧑‍🌾");
+    iconPersemaian = createIcon("🌱");
+    iconPegawai = createIcon("🧑‍💼");
+    iconJumat = createIcon("📍");
+
+    layerPJL.eachLayer(l => l.setIcon(iconPJL));
+    layerPersemaian.eachLayer(l => l.setIcon(iconPersemaian));
+    layerPegawai.eachLayer(l => l.setIcon(iconPegawai));
+    layerJumat.eachLayer(l => l.setIcon(iconJumat));
+});
 
 // ================= HELPER =================
 function safe(val) {
@@ -99,10 +110,14 @@ function safe(val) {
 
 function toFloat(val) {
     if (!val) return null;
-    return parseFloat(val.toString().replace(",", "."));
+    return parseFloat(
+        val.toString()
+        .replace(",", ".")
+        .replace(/[^0-9.-]/g, "")
+    );
 }
 
-function gmapsLink(lat, lng) {
+function gmaps(lat,lng){
     return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
@@ -110,138 +125,104 @@ function gmapsLink(lat, lng) {
 function loadCSV(url, type) {
 
     Papa.parse(url, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
+        download:true,
+        header:true,
+        skipEmptyLines:true,
 
-        complete: function(res) {
+        complete:function(res){
 
             const data = res.data;
 
-            // ===== PJL =====
-            if (type === "pjl") {
-
+            if(type==="pjl"){
                 const grouped = {};
 
-                data.forEach(row => {
+                data.forEach(r=>{
+                    const lat = toFloat(r["Titik Koordinat Penanaman (Y)"]);
+                    const lng = toFloat(r["Titik Koordinat Penanaman (X)"]);
+                    const penyuluh = safe(r["Penyuluh Kehutanan"]);
 
-                    const lat = toFloat(row["Titik Koordinat Penanaman (Y)"]);
-                    const lng = toFloat(row["Titik Koordinat Penanaman (X)"]);
-                    const penyuluh = safe(row["Penyuluh Kehutanan"]);
+                    if(!lat || !lng || isNaN(lat) || isNaN(lng)) return;
 
-                    if (!lat || !lng) return;
+                    const key = lat+"_"+lng+"_"+penyuluh;
 
-                    const key = lat + "_" + lng + "_" + penyuluh;
-
-                    if (!grouped[key]) grouped[key] = [];
-                    grouped[key].push(row);
+                    if(!grouped[key]) grouped[key]=[];
+                    grouped[key].push(r);
                 });
 
-                Object.values(grouped).forEach(group => {
+                Object.values(grouped).forEach(group=>{
+                    const r = group[0];
+                    const lat = toFloat(r["Titik Koordinat Penanaman (Y)"]);
+                    const lng = toFloat(r["Titik Koordinat Penanaman (X)"]);
 
-                    const row = group[0];
-                    const lat = toFloat(row["Titik Koordinat Penanaman (Y)"]);
-                    const lng = toFloat(row["Titik Koordinat Penanaman (X)"]);
+                    let html = `<b>Penyuluh:</b> ${safe(r["Penyuluh Kehutanan"])}<hr>`;
 
-                    let content = `<b>Penyuluh:</b> ${safe(row["Penyuluh Kehutanan"])}<hr>`;
-
-                    group.forEach(r => {
-                        content += `
-                        <b>Nama:</b> ${safe(r["Nama Lengkap"])}<br>
-                        <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
-                        <b>Kawasan:</b> ${safe(r["Kawasan Leuweung/ Gunung"])}<br>
-                        <hr>`;
+                    group.forEach(g=>{
+                        html += `<b>Nama:</b> ${safe(g["Nama Lengkap"])}<br>
+                                 <b>Unit:</b> ${safe(g["Unit Kerja"])}<br>
+                                 <b>Kawasan:</b> ${safe(g["Kawasan Leuweung/ Gunung"])}<hr>`;
                     });
 
-                    content += `<a href="${gmapsLink(lat,lng)}" target="_blank">📍 Google Maps</a>`;
+                    html += `<a href="${gmaps(lat,lng)}" target="_blank">📍 Google Maps</a>`;
 
-                    L.marker([lat,lng], {icon: iconPJL})
+                    L.marker([lat,lng],{icon:iconPJL})
                         .addTo(layerPJL)
-                        .bindPopup(`<div style="max-height:200px;overflow:auto">${content}</div>`);
-
-                    bounds.push([lat,lng]);
+                        .bindPopup(`<div style="max-height:200px;overflow:auto">${html}</div>`);
                 });
             }
 
-            // ===== PERSEMAIAN =====
-            if (type === "persemaian") {
-
-                data.forEach(r => {
-
+            if(type==="persemaian"){
+                data.forEach(r=>{
                     const lat = toFloat(r["latitude"]);
                     const lng = toFloat(r["longitude"]);
-                    if (!lat || !lng) return;
+                    if(!lat || !lng || isNaN(lat)) return;
 
-                    const popup = `
-                    <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
-                    <b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
-                    <b>Desa:</b> ${safe(r["Desa/ Kelurahan"])}<br>
-                    <b>Status:</b> ${safe(r["Status Persemaian"])}<br>
-                    <b>Koordinat:</b> ${lat}, ${lng}<br>
-                    <a href="${gmapsLink(lat,lng)}" target="_blank">📍 Maps</a>
-                    `;
-
-                    L.marker([lat,lng], {icon: iconPersemaian})
+                    L.marker([lat,lng],{icon:iconPersemaian})
                         .addTo(layerPersemaian)
-                        .bindPopup(popup);
-
-                    bounds.push([lat,lng]);
+                        .bindPopup(`
+                        <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                        <b>Status:</b> ${safe(r["Status Persemaian"])}<br>
+                        <b>Koordinat:</b> ${lat},${lng}<br>
+                        <a href="${gmaps(lat,lng)}" target="_blank">📍 Maps</a>
+                        `);
                 });
             }
 
-            // ===== PEGAWAI =====
-            if (type === "pegawai") {
-
-                data.forEach(r => {
-
+            if(type==="pegawai"){
+                data.forEach(r=>{
                     const lat = toFloat(r["latitude"]);
                     const lng = toFloat(r["longitude"]);
-                    if (!lat || !lng) return;
+                    if(!lat || !lng || isNaN(lat)) return;
 
-                    const popup = `
-                    <b>Nama:</b> ${safe(r["Nama"])}<br>
-                    <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
-                    <b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
-                    <b>Alamat:</b> ${safe(r["Alamat"])}<br>
-                    <b>Koordinat:</b> ${lat}, ${lng}<br>
-                    <a href="${gmapsLink(lat,lng)}" target="_blank">📍 Maps</a>
-                    `;
-
-                    L.marker([lat,lng], {icon: iconPegawai})
+                    L.marker([lat,lng],{icon:iconPegawai})
                         .addTo(layerPegawai)
-                        .bindPopup(popup);
-
-                    bounds.push([lat,lng]);
+                        .bindPopup(`
+                        <b>Nama:</b> ${safe(r["Nama"])}<br>
+                        <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                        <b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
+                        <b>Koordinat:</b> ${lat},${lng}<br>
+                        <a href="${gmaps(lat,lng)}" target="_blank">📍 Maps</a>
+                        `);
                 });
             }
 
-            // ===== JUMAT MENANAM =====
-            if (type === "jumat") {
-
-                data.forEach(r => {
-
+            if(type==="jumat"){
+                data.forEach(r=>{
                     const lat = toFloat(r["Titik Koordinat (Y)"]);
                     const lng = toFloat(r["Titik Koordinat (x)"]);
-                    if (!lat || !lng) return;
+                    if(!lat || !lng || isNaN(lat)) return;
 
-                    const popup = `
-                    <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
-                    <b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
-                    <b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
-                    <b>Luas:</b> ${safe(r["Luas Rencana Penanaman  (Ha)"])} Ha<br>
-                    <b>Koordinat:</b> ${lat}, ${lng}<br>
-                    <a href="${gmapsLink(lat,lng)}" target="_blank">📍 Maps</a>
-                    `;
-
-                    L.marker([lat,lng], {icon: iconJumat})
+                    L.marker([lat,lng],{icon:iconJumat})
                         .addTo(layerJumat)
-                        .bindPopup(popup);
-
-                    bounds.push([lat,lng]);
+                        .bindPopup(`
+                        <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                        <b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
+                        <b>Luas:</b> ${safe(r["Luas Rencana Penanaman  (Ha)"])} Ha<br>
+                        <b>Koordinat:</b> ${lat},${lng}<br>
+                        <a href="${gmaps(lat,lng)}" target="_blank">📍 Maps</a>
+                        `);
                 });
             }
 
-            if (bounds.length > 0) map.fitBounds(bounds);
         }
     });
 }
@@ -252,32 +233,32 @@ function loadCSV(url, type) {
 [
 "1107501735","1715712076","1053237933","1784821909",
 "946859661","96096761","1779255843","635466960","360434997"
-].forEach(gid=>{
-    loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${gid}&single=true&output=csv`,"pjl");
+].forEach(g=>{
+loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&single=true&output=csv`,"pjl");
 });
 
 // PERSEMAIAN (9)
 [
 "1149553688","1364517698","144675684","1843729244",
 "1981250821","1159710704","1142124495","420074128","1536834083"
-].forEach(gid=>{
-    loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${gid}&single=true&output=csv`,"persemaian");
+].forEach(g=>{
+loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&single=true&output=csv`,"persemaian");
 });
 
-// PEGAWAI
+// Pegawai
 loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv","pegawai");
 
-// JUMAT MENANAM
+// Jumat
 loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv","jumat");
 
 // ================= LEGEND =================
 const legend = L.control({position:"bottomright"});
 
-legend.onAdd = function() {
+legend.onAdd = function(){
     const div = L.DomUtil.create("div","legend");
     div.innerHTML = `
     <b>Legenda</b><br>
-    🧑‍🌾 Petugas Jaga Leuweung<br>
+    🧑‍🌾 PJL<br>
     🌱 Persemaian<br>
     🧑‍💼 Pegawai<br>
     📍 Jumat Menanam
@@ -287,8 +268,6 @@ legend.onAdd = function() {
 
 legend.addTo(map);
 
-});
 </script>
-
 </body>
 </html>
