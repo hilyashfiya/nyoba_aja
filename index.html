@@ -1,23 +1,58 @@
+<!DOCTYPE html>
+<html>
 <head>
+    <title>Monitoring Domisili Pegawai dan Program Unggulan</title>
+
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- ✅ Leaflet CSS -->
+    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-    <!-- ✅ Leaflet JS (WAJIB sebelum script kamu) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- ✅ PapaParse -->
+    <!-- PapaParse -->
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-</head>
-<script>
 
-// ================== CONFIG ==================
+    <style>
+        body { margin:0; font-family:Arial; }
+        #map { height:100vh; }
+
+        .title {
+            position:absolute;
+            top:10px;
+            left:50%;
+            transform:translateX(-50%);
+            background:white;
+            padding:10px 20px;
+            border-radius:8px;
+            font-weight:bold;
+            z-index:1000;
+            box-shadow:0 2px 6px rgba(0,0,0,0.3);
+        }
+
+        .legend {
+            background:white;
+            padding:10px;
+            border-radius:8px;
+            line-height:1.5;
+            box-shadow:0 2px 6px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="title">Monitoring Domisili Pegawai dan Program Unggulan</div>
+<div id="map"></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+// ================= CONFIG =================
 const isMobile = window.innerWidth < 768;
 const iconSize = isMobile ? 25 : 35;
 
-// ICON (pakai emoji biar ringan & universal)
+// ICON
 function createIcon(emoji) {
     return L.divIcon({
         html: `<div style="font-size:${iconSize}px">${emoji}</div>`,
@@ -31,7 +66,7 @@ const iconPersemaian = createIcon("🌱");
 const iconPegawai = createIcon("🧑‍💼");
 const iconJumat = createIcon("📍");
 
-// ================== MAP ==================
+// ================= MAP =================
 const map = L.map('map').setView([-6.9, 107.6], 8);
 
 // BASEMAP
@@ -49,7 +84,7 @@ L.control.layers({
     "ESRI": esri
 }).addTo(map);
 
-// ================== LAYER ==================
+// ================= LAYER =================
 const layerPJL = L.layerGroup().addTo(map);
 const layerPersemaian = L.layerGroup().addTo(map);
 const layerPegawai = L.layerGroup().addTo(map);
@@ -57,7 +92,7 @@ const layerJumat = L.layerGroup().addTo(map);
 
 const bounds = [];
 
-// ================== HELPER ==================
+// ================= HELPER =================
 function safe(val) {
     return val && val !== "" ? val : "Data tidak tersedia";
 }
@@ -71,7 +106,7 @@ function gmapsLink(lat, lng) {
     return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
-// ================== LOAD CSV ==================
+// ================= LOAD CSV =================
 function loadCSV(url, type) {
 
     Papa.parse(url, {
@@ -83,7 +118,7 @@ function loadCSV(url, type) {
 
             const data = res.data;
 
-            // ================== PJL (MERGE LOGIC) ==================
+            // ===== PJL =====
             if (type === "pjl") {
 
                 const grouped = {};
@@ -108,18 +143,17 @@ function loadCSV(url, type) {
                     const lat = toFloat(row["Titik Koordinat Penanaman (Y)"]);
                     const lng = toFloat(row["Titik Koordinat Penanaman (X)"]);
 
-                    let content = `<b>Penyuluh:</b> ${safe(row["Penyuluh Kehutanan"])}<hr style="margin:5px 0;">`;
+                    let content = `<b>Penyuluh:</b> ${safe(row["Penyuluh Kehutanan"])}<hr>`;
 
                     group.forEach(r => {
                         content += `
                         <b>Nama:</b> ${safe(r["Nama Lengkap"])}<br>
                         <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
                         <b>Kawasan:</b> ${safe(r["Kawasan Leuweung/ Gunung"])}<br>
-                        <hr style="margin:5px 0;">
-                        `;
+                        <hr>`;
                     });
 
-                    content += `<a href="${gmapsLink(lat,lng)}" target="_blank">📍 Buka di Google Maps</a>`;
+                    content += `<a href="${gmapsLink(lat,lng)}" target="_blank">📍 Google Maps</a>`;
 
                     L.marker([lat,lng], {icon: iconPJL})
                         .addTo(layerPJL)
@@ -129,7 +163,7 @@ function loadCSV(url, type) {
                 });
             }
 
-            // ================== PERSEMAIAN ==================
+            // ===== PERSEMAIAN =====
             if (type === "persemaian") {
 
                 data.forEach(r => {
@@ -155,7 +189,7 @@ function loadCSV(url, type) {
                 });
             }
 
-            // ================== PEGAWAI ==================
+            // ===== PEGAWAI =====
             if (type === "pegawai") {
 
                 data.forEach(r => {
@@ -181,7 +215,7 @@ function loadCSV(url, type) {
                 });
             }
 
-            // ================== JUMAT MENANAM ==================
+            // ===== JUMAT MENANAM =====
             if (type === "jumat") {
 
                 data.forEach(r => {
@@ -212,9 +246,9 @@ function loadCSV(url, type) {
     });
 }
 
-// ================== LOAD SEMUA DATA ==================
+// ================= LOAD DATA =================
 
-// 🔥 9 PJL
+// PJL (9)
 [
 "1107501735","1715712076","1053237933","1784821909",
 "946859661","96096761","1779255843","635466960","360434997"
@@ -222,7 +256,7 @@ function loadCSV(url, type) {
     loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${gid}&single=true&output=csv`,"pjl");
 });
 
-// 🔥 9 PERSEMAIAN
+// PERSEMAIAN (9)
 [
 "1149553688","1364517698","144675684","1843729244",
 "1981250821","1159710704","1142124495","420074128","1536834083"
@@ -230,20 +264,20 @@ function loadCSV(url, type) {
     loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${gid}&single=true&output=csv`,"persemaian");
 });
 
-// 🔥 PEGAWAI
+// PEGAWAI
 loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv","pegawai");
 
-// 🔥 JUMAT MENANAM
+// JUMAT MENANAM
 loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv","jumat");
 
-// ================== LEGEND ==================
+// ================= LEGEND =================
 const legend = L.control({position:"bottomright"});
 
 legend.onAdd = function() {
     const div = L.DomUtil.create("div","legend");
     div.innerHTML = `
     <b>Legenda</b><br>
-    🧑‍🌾 PJL<br>
+    🧑‍🌾 Petugas Jaga Leuweung<br>
     🌱 Persemaian<br>
     🧑‍💼 Pegawai<br>
     📍 Jumat Menanam
@@ -253,4 +287,8 @@ legend.onAdd = function() {
 
 legend.addTo(map);
 
+});
 </script>
+
+</body>
+</html>
