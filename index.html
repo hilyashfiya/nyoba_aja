@@ -1,98 +1,243 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>WebGIS Data Jawa Barat</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- PapaParse -->
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
-    <style>
-        #map {
-            height: 100vh;
-        }
-    </style>
-</head>
-<body>
-
-<div id="map"></div>
-
 <script>
-// 🔥 LINK CSV KAMU
-const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv";
 
-// Inisialisasi map
+// ================== CONFIG ==================
+const isMobile = window.innerWidth < 768;
+const iconSize = isMobile ? 25 : 35;
+
+// ICON (pakai emoji biar ringan & universal)
+function createIcon(emoji) {
+    return L.divIcon({
+        html: `<div style="font-size:${iconSize}px">${emoji}</div>`,
+        className: '',
+        iconSize: [iconSize, iconSize]
+    });
+}
+
+const iconPJL = createIcon("🧑‍🌾");
+const iconPersemaian = createIcon("🌱");
+const iconPegawai = createIcon("🧑‍💼");
+const iconJumat = createIcon("📍");
+
+// ================== MAP ==================
 const map = L.map('map').setView([-6.9, 107.6], 8);
 
-// Basemap ESRI
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles © Esri'
+// BASEMAP
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png');
+const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+const satelit = esri;
+
+osm.addTo(map);
+
+L.control.layers({
+    "OSM": osm,
+    "Topografi": topo,
+    "Satelit": satelit,
+    "ESRI": esri
 }).addTo(map);
 
-// 🔥 Untuk auto zoom
+// ================== LAYER ==================
+const layerPJL = L.layerGroup().addTo(map);
+const layerPersemaian = L.layerGroup().addTo(map);
+const layerPegawai = L.layerGroup().addTo(map);
+const layerJumat = L.layerGroup().addTo(map);
+
 const bounds = [];
 
-// Parse CSV
-Papa.parse(csvUrl, {
-    download: true,
-    header: true,
-    skipEmptyLines: true,
+// ================== HELPER ==================
+function safe(val) {
+    return val && val !== "" ? val : "Data tidak tersedia";
+}
 
-    complete: function(results) {
+function toFloat(val) {
+    if (!val) return null;
+    return parseFloat(val.toString().replace(",", "."));
+}
 
-        console.log("DATA:", results.data);
+function gmapsLink(lat, lng) {
+    return `https://www.google.com/maps?q=${lat},${lng}`;
+}
 
-        results.data.forEach((row, i) => {
+// ================== LOAD CSV ==================
+function loadCSV(url, type) {
 
-            // 🔥 Ambil field koordinat (sesuai punyamu)
-            let lng = row["Titik Koordinat (x)"];
-            let lat = row["Titik Koordinat (Y)"];
+    Papa.parse(url, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
 
-            if (!lng || !lat) return;
+        complete: function(res) {
 
-            // Bersihkan data
-            lng = parseFloat(lng.toString().replace(",", ".").trim());
-            lat = parseFloat(lat.toString().replace(",", ".").trim());
+            const data = res.data;
 
-            console.log("COORD:", lat, lng);
+            // ================== PJL (MERGE LOGIC) ==================
+            if (type === "pjl") {
 
-            if (!isNaN(lat) && !isNaN(lng)) {
+                const grouped = {};
 
-                // 🔥 Marker jelas
-                L.circleMarker([lat, lng], {
-                    radius: 8,
-                    color: "#ff1493",
-                    fillColor: "#ff69b4",
-                    fillOpacity: 1,
-                    weight: 2
-                })
-                .addTo(map)
-                .bindPopup(`
-                    <b>Unit Kerja:</b> ${row["Unit Kerja"]}<br>
-                    <b>Kab/Kota:</b> ${row["Kabupaten/Kota"]}<br>
-                    <b>Kecamatan:</b> ${row["Kecamatan"]}<br>
-                    <b>Desa:</b> ${row["Desa/Kelurahan"]}<br>
-                    <b>DAS:</b> ${row["DAS"]}<br>
-                    <b>Koordinat:</b><br>
-                    ${lat}, ${lng}
-                `);
+                data.forEach(row => {
 
-                bounds.push([lat, lng]);
+                    const lat = toFloat(row["Titik Koordinat Penanaman (Y)"]);
+                    const lng = toFloat(row["Titik Koordinat Penanaman (X)"]);
+                    const penyuluh = safe(row["Penyuluh Kehutanan"]);
+
+                    if (!lat || !lng) return;
+
+                    const key = lat + "_" + lng + "_" + penyuluh;
+
+                    if (!grouped[key]) grouped[key] = [];
+                    grouped[key].push(row);
+                });
+
+                Object.values(grouped).forEach(group => {
+
+                    const row = group[0];
+                    const lat = toFloat(row["Titik Koordinat Penanaman (Y)"]);
+                    const lng = toFloat(row["Titik Koordinat Penanaman (X)"]);
+
+                    let content = `<b>Penyuluh:</b> ${safe(row["Penyuluh Kehutanan"])}<hr style="margin:5px 0;">`;
+
+                    group.forEach(r => {
+                        content += `
+                        <b>Nama:</b> ${safe(r["Nama Lengkap"])}<br>
+                        <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                        <b>Kawasan:</b> ${safe(r["Kawasan Leuweung/ Gunung"])}<br>
+                        <hr style="margin:5px 0;">
+                        `;
+                    });
+
+                    content += `<a href="${gmapsLink(lat,lng)}" target="_blank">📍 Buka di Google Maps</a>`;
+
+                    L.marker([lat,lng], {icon: iconPJL})
+                        .addTo(layerPJL)
+                        .bindPopup(`<div style="max-height:200px;overflow:auto">${content}</div>`);
+
+                    bounds.push([lat,lng]);
+                });
             }
-        });
 
-        // 🔥 AUTO ZOOM (INI KUNCI BIAR KELIHATAN)
-        if (bounds.length > 0) {
-            map.fitBounds(bounds);
+            // ================== PERSEMAIAN ==================
+            if (type === "persemaian") {
+
+                data.forEach(r => {
+
+                    const lat = toFloat(r["latitude"]);
+                    const lng = toFloat(r["longitude"]);
+                    if (!lat || !lng) return;
+
+                    const popup = `
+                    <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                    <b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
+                    <b>Desa:</b> ${safe(r["Desa/ Kelurahan"])}<br>
+                    <b>Status:</b> ${safe(r["Status Persemaian"])}<br>
+                    <b>Koordinat:</b> ${lat}, ${lng}<br>
+                    <a href="${gmapsLink(lat,lng)}" target="_blank">📍 Maps</a>
+                    `;
+
+                    L.marker([lat,lng], {icon: iconPersemaian})
+                        .addTo(layerPersemaian)
+                        .bindPopup(popup);
+
+                    bounds.push([lat,lng]);
+                });
+            }
+
+            // ================== PEGAWAI ==================
+            if (type === "pegawai") {
+
+                data.forEach(r => {
+
+                    const lat = toFloat(r["latitude"]);
+                    const lng = toFloat(r["longitude"]);
+                    if (!lat || !lng) return;
+
+                    const popup = `
+                    <b>Nama:</b> ${safe(r["Nama"])}<br>
+                    <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                    <b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
+                    <b>Alamat:</b> ${safe(r["Alamat"])}<br>
+                    <b>Koordinat:</b> ${lat}, ${lng}<br>
+                    <a href="${gmapsLink(lat,lng)}" target="_blank">📍 Maps</a>
+                    `;
+
+                    L.marker([lat,lng], {icon: iconPegawai})
+                        .addTo(layerPegawai)
+                        .bindPopup(popup);
+
+                    bounds.push([lat,lng]);
+                });
+            }
+
+            // ================== JUMAT MENANAM ==================
+            if (type === "jumat") {
+
+                data.forEach(r => {
+
+                    const lat = toFloat(r["Titik Koordinat (Y)"]);
+                    const lng = toFloat(r["Titik Koordinat (x)"]);
+                    if (!lat || !lng) return;
+
+                    const popup = `
+                    <b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+                    <b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
+                    <b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
+                    <b>Luas:</b> ${safe(r["Luas Rencana Penanaman  (Ha)"])} Ha<br>
+                    <b>Koordinat:</b> ${lat}, ${lng}<br>
+                    <a href="${gmapsLink(lat,lng)}" target="_blank">📍 Maps</a>
+                    `;
+
+                    L.marker([lat,lng], {icon: iconJumat})
+                        .addTo(layerJumat)
+                        .bindPopup(popup);
+
+                    bounds.push([lat,lng]);
+                });
+            }
+
+            if (bounds.length > 0) map.fitBounds(bounds);
         }
-    }
-});
-</script>
+    });
+}
 
-</body>
-</html>
+// ================== LOAD SEMUA DATA ==================
+
+// 🔥 9 PJL
+[
+"1107501735","1715712076","1053237933","1784821909",
+"946859661","96096761","1779255843","635466960","360434997"
+].forEach(gid=>{
+    loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${gid}&single=true&output=csv`,"pjl");
+});
+
+// 🔥 9 PERSEMAIAN
+[
+"1149553688","1364517698","144675684","1843729244",
+"1981250821","1159710704","1142124495","420074128","1536834083"
+].forEach(gid=>{
+    loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${gid}&single=true&output=csv`,"persemaian");
+});
+
+// 🔥 PEGAWAI
+loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv","pegawai");
+
+// 🔥 JUMAT MENANAM
+loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv","jumat");
+
+// ================== LEGEND ==================
+const legend = L.control({position:"bottomright"});
+
+legend.onAdd = function() {
+    const div = L.DomUtil.create("div","legend");
+    div.innerHTML = `
+    <b>Legenda</b><br>
+    🧑‍🌾 PJL<br>
+    🌱 Persemaian<br>
+    🧑‍💼 Pegawai<br>
+    📍 Jumat Menanam
+    `;
+    return div;
+};
+
+legend.addTo(map);
+
+</script>
