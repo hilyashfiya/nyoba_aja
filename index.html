@@ -148,8 +148,24 @@ const layerJum=L.layerGroup().addTo(map);
 // DATA
 let DATA={pjl:[],persemaian:[],pegawai:[],jumat:[]};
 let FILTER={cdk:"",pegawai:"",kab:"",status:"",kawasan:"",penyuluh:""};
+let batasKabupaten = null;
+let geoReady = false;
 
 // HELPER
+function getKabupaten(lat, lng){
+
+    if(!batasKabupaten) return "";
+
+    let pt = turf.point([lng, lat]);
+
+    for(let f of batasKabupaten.features){
+        if(turf.booleanPointInPolygon(pt, f)){
+            return f.properties.KAB_KOTA || "Tidak diketahui";
+        }
+    }
+
+    return "Di luar Jawa Barat";
+}
 const f=v=>{
 if(!v) return null;
 let num=parseFloat(v.toString().replace(",","."));
@@ -245,6 +261,36 @@ if((r["Penyuluh Kehutanan"]||"")!==FILTER.penyuluh) return false;
 return true;
 }
 
+function checkReady(){
+    if(loadedCSV === totalCSV && geoReady){
+
+        // 🔥 assign kabupaten SETELAH semua siap
+        Object.values(DATA).flat().forEach(r=>{
+            if(r._lat && r._lng){
+                r._kab = getKabupaten(r._lat, r._lng);
+            }
+        });
+
+        fillDropdown();
+        render();
+    }
+}
+
+// ================= LOAD GEOJSON =================
+fetch("Jawa Barat.geojson")
+.then(res => res.json())
+.then(data => {
+    batasKabupaten = data;
+    geoReady = true;
+
+    // tampilkan batas wilayah (opsional)
+    L.geoJSON(batasKabupaten,{
+        style:{color:"#555",weight:1,fillOpacity:0}
+    }).addTo(map);
+
+    checkReady();
+});
+
 // ================= LOAD CSV =================
 function loadCSV(url,type){
 Papa.parse(url,{
@@ -263,7 +309,8 @@ let lng = r["longitude"]!==undefined && r["longitude"]!==""
 : f(r["Titik Koordinat (x)"]);
 
 if(lat && lng){
-r._kab = r["Kabupaten/Kota"] || r["Kabupaten"] || "";
+    r._lat = lat;
+    r._lng = lng;
 }
 });
 
@@ -271,11 +318,9 @@ DATA[type]=DATA[type].concat(res.data);
 
 loadedCSV++;
 
-// 🔥 hanya setelah semua CSV selesai
-if(loadedCSV===totalCSV){
-fillDropdown();
-render();
-}
+// 🔥 TAMBAHKAN INI
+checkReady();
+
 }
 });
 }
@@ -355,7 +400,10 @@ penyuluhList.sort();
 
 penyuluhList.forEach(v=>{
 f_penyuluh.innerHTML+=`<option>${v}</option>`;
-}
+});
+
+// 🔥 TAMBAHKAN INI
+} // <-- penutup function fillDropdown()
 
 // ================= RENDER (ANTI LAG) =================
 let renderTimeout;
