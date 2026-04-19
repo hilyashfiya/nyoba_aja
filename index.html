@@ -14,6 +14,8 @@
 html,body{margin:0;padding:0;}
 #map{height:100vh;}
 
+.leaflet-div-icon{background:transparent!important;border:none!important;}
+
 .title{
 position:absolute;top:10px;left:50%;
 transform:translateX(-50%);
@@ -32,17 +34,24 @@ box-shadow:0 2px 10px rgba(0,0,0,0.2);
 max-height:80vh;overflow:auto;
 }
 
-.panel{right:10px;width:280px;}
+.panel{right:10px;width:300px;}
 .filter{left:10px;width:260px;}
+
+.legend{
+position:absolute;
+bottom:20px;left:10px;
+background:white;padding:10px;
+border-radius:8px;
+z-index:999;
+box-shadow:0 2px 10px rgba(0,0,0,0.2);
+cursor:pointer;
+}
+
+.legend.hide{height:20px;overflow:hidden;}
 
 canvas{
 width:100%!important;
-height:160px!important;
-}
-
-.popup{
-font-size:13px;
-line-height:1.4;
+height:200px!important;
 }
 </style>
 </head>
@@ -52,12 +61,13 @@ line-height:1.4;
 <div class="title">Monitoring Domisili Pegawai dan Program Unggulan Tahun 2026</div>
 <div id="map"></div>
 
+<!-- FILTER -->
 <div class="filter">
-<b>Filter</b><br><br>
+<b>Filter Data</b><br><br>
 
-CDK<br>
+<b>CDK Wilayah</b><br>
 <select id="f_cdk">
-<option value="">Semua</option>
+<option value="">Semua CDK</option>
 <option>CDK WILAYAH I</option>
 <option>CDK WILAYAH II</option>
 <option>CDK WILAYAH III</option>
@@ -69,8 +79,20 @@ CDK<br>
 <option>CDK WILAYAH IX</option>
 </select><br><br>
 
-Unit Pegawai<br>
-<select id="f_unitPegawai"><option value="">Semua</option></select>
+<b>Unit Kerja Pegawai</b><br>
+<select id="f_unitPegawai"><option value="">Semua</option></select><br>
+
+<b>Kabupaten</b><br>
+<select id="f_kab"><option value="">Semua</option></select><br>
+
+<b>Status Persemaian</b><br>
+<select id="f_status"><option value="">Semua</option></select><br>
+
+<b>Kawasan</b><br>
+<select id="f_kawasan"><option value="">Semua</option></select><br>
+
+<b>Penyuluh</b><br>
+<select id="f_penyuluh"><option value="">Semua</option></select><br>
 </div>
 
 <div class="panel">
@@ -79,150 +101,170 @@ Unit Pegawai<br>
 <canvas id="c2"></canvas>
 <canvas id="c3"></canvas>
 <canvas id="c4"></canvas>
+<canvas id="c5"></canvas>
+</div>
+
+<div class="legend" id="legendBox">
+<b>Legenda</b><br>
+🧑‍🌾 PJL<br>
+🌱 Persemaian<br>
+🧑‍💼 Pegawai<br>
+📍 Jumat Menanam
 </div>
 
 <script>
 
 // ================= MAP =================
-const map=L.map('map',{center:[-6.9,107.6],zoom:8});
+const map=L.map('map').setView([-6.9,107.6],8);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}');
-const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png');
-
-L.control.layers({OSM:osm,Esri:esri,Satelit:sat,Medan:topo}).addTo(map);
+document.getElementById("legendBox").onclick=function(){
+this.classList.toggle("hide");
+};
 
 // ================= ICON =================
-const icon=e=>L.divIcon({html:e,className:""});
-const iPJL=icon("🧑‍🌾"), iPer=icon("🌱"), iPeg=icon("🧑‍💼"), iJum=icon("📍");
+const createIcon=e=>L.divIcon({html:`<div>${e}</div>`,className:""});
+const iconPJL=createIcon("🧑‍🌾");
+const iconPer=createIcon("🌱");
+const iconPeg=createIcon("🧑‍💼");
+const iconJum=createIcon("📍");
 
 // ================= LAYER =================
-const Lpjl=L.layerGroup().addTo(map);
-const Lper=L.layerGroup().addTo(map);
-const Lpeg=L.layerGroup().addTo(map);
-const Ljum=L.layerGroup().addTo(map);
+const layerPJL=L.layerGroup().addTo(map);
+const layerPer=L.layerGroup().addTo(map);
+const layerPeg=L.layerGroup().addTo(map);
+const layerJum=L.layerGroup().addTo(map);
 
 // ================= DATA =================
-let DATA={pjl:[],per:[],peg:[],jum:[]};
+let DATA={pjl:[],persemaian:[],pegawai:[],jumat:[]};
 let FILTER={};
+
+let totalCSV = 20;
+let loadedCSV = 0;
 
 // ================= HELPER =================
 const f=v=>{
-if(!v)return null;
-let n=parseFloat(v.toString().replace(",","."));
-return isNaN(n)?null:n;
+if(v===undefined||v===null||v==="") return null;
+let num=parseFloat(v.toString().replace(",","."));
+return isNaN(num)?null:num;
 };
 
-const safe=v=>v||"Data tidak tersedia";
+const safeFull=v=> (v? v:"Data tidak tersedia");
 
-function coord(r){
-let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"])||f(r["Titik Koordinat Penanaman (Y)"]);
-let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"])||f(r["Titik Koordinat Penanaman (X)"]);
-if(!lat||!lng)return null;
-return [lat,lng];
-}
-
-function gmaps(lat,lng){
-return `<br><a target="_blank" href="https://www.google.com/maps?q=${lat},${lng}">📍 Buka Google Maps</a>`;
+function mapsLink(lat,lng){
+if(!lat||!lng) return "";
+return `<br><a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">📍 Buka Maps</a>`;
 }
 
 // ================= FILTER =================
 function applyFilter(){
-FILTER.cdk=f_cdk.value;
-FILTER.unit=f_unitPegawai.value;
+FILTER={
+cdk:document.getElementById("f_cdk").value,
+pegawai:document.getElementById("f_unitPegawai").value,
+kab:document.getElementById("f_kab").value,
+status:document.getElementById("f_status").value,
+kawasan:document.getElementById("f_kawasan").value,
+penyuluh:document.getElementById("f_penyuluh").value
+};
 render();
 }
-document.querySelectorAll("select").forEach(s=>s.onchange=applyFilter);
 
-function pass(r,type){
-let u=(r["Unit Kerja"]||"");
-if(FILTER.cdk && !u.includes(FILTER.cdk)) return false;
-if(type==="peg" && FILTER.unit && u!==FILTER.unit) return false;
-return true;
+document.querySelectorAll("select").forEach(s=>{
+s.addEventListener("change",applyFilter);
+});
+
+// ================= LOAD CSV =================
+function loadCSV(url,type){
+Papa.parse(url,{
+download:true,
+header:true,
+skipEmptyLines:true,
+complete:res=>{
+
+res.data.forEach(r=>{
+let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"]);
+let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"]);
+if(lat!==null&&lng!==null){
+r._kab=r["Kabupaten/Kota"]||r["Kabupaten"]||"";
+}
+});
+
+DATA[type]=DATA[type].concat(res.data);
+
+loadedCSV++;
+if(loadedCSV===totalCSV){
+fillDropdown();
+render();
+}
+
+}
+});
+}
+
+// ================= DROPDOWN =================
+function fillDropdown(){
+
+const set=(id,data)=>{
+let el=document.getElementById(id);
+let uniq=[...new Set(data.filter(x=>x))].sort();
+el.innerHTML='<option value="">Semua</option>';
+uniq.forEach(v=>el.innerHTML+=`<option>${v}</option>`);
+};
+
+set("f_kab",Object.values(DATA).flat().map(x=>x._kab));
+set("f_status",DATA.persemaian.map(x=>x["Status Persemaian"]));
+set("f_kawasan",DATA.pjl.map(x=>x["Kawasan Leuweung/ Gunung"]));
+set("f_penyuluh",DATA.pjl.map(x=>x["Penyuluh Kehutanan"]));
+set("f_unitPegawai",DATA.pegawai.map(x=>x["Unit Kerja"]));
+
 }
 
 // ================= RENDER =================
 function render(){
 
-Lpjl.clearLayers(); Lper.clearLayers();
-Lpeg.clearLayers(); Ljum.clearLayers();
+layerPJL.clearLayers();
+layerPer.clearLayers();
+layerPeg.clearLayers();
+layerJum.clearLayers();
 
-// PJL
 DATA.pjl.forEach(r=>{
-if(!pass(r,"pjl"))return;
-let c=coord(r); if(!c)return;
+let lat=f(r["Titik Koordinat Penanaman (Y)"]);
+let lng=f(r["Titik Koordinat Penanaman (X)"]);
+if(lat===null||lng===null) return;
 
-L.marker(c,{icon:iPJL})
-.bindPopup(`
-<div class="popup">
-<b>🧑‍🌾 PETUGAS JAGA LEUWEUNG</b><hr>
-<b>Nama:</b> ${safe(r["Nama Lengkap"])}<br>
-<b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
-<b>Kawasan:</b> ${safe(r["Kawasan Leuweung/ Gunung"])}<br>
-<b>Penyuluh:</b> ${safe(r["Penyuluh Kehutanan"])}<br>
-${gmaps(c[0],c[1])}
-</div>
-`)
-.addTo(Lpjl);
+L.marker([lat,lng],{icon:iconPJL})
+.bindPopup(`<b>${safeFull(r["Nama Lengkap"])}</b>${mapsLink(lat,lng)}`)
+.addTo(layerPJL);
 });
 
-// PERSEMAIAN
-DATA.per.forEach(r=>{
-if(!pass(r,"per"))return;
-let c=coord(r); if(!c)return;
+DATA.persemaian.forEach(r=>{
+let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"]);
+let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"]);
+if(lat===null||lng===null) return;
 
-L.marker(c,{icon:iPer})
-.bindPopup(`
-<div class="popup">
-<b>🌱 PERSEMAIAN</b><hr>
-<b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
-<b>Status:</b> ${safe(r["Status Persemaian"])}<br>
-<b>Luas:</b> ${safe(r["Luas (Ha)"])} Ha<br>
-<b>Target:</b> ${safe(r["Target Bibit"])}<br>
-<b>Realisasi:</b> ${safe(r["Realisasi Bibit"])}<br>
-${gmaps(c[0],c[1])}
-</div>
-`)
-.addTo(Lper);
+L.marker([lat,lng],{icon:iconPer})
+.bindPopup(`<b>${safeFull(r["Nama Personil Jaga Leuweung"])}</b>${mapsLink(lat,lng)}`)
+.addTo(layerPer);
 });
 
-// PEGAWAI
-DATA.peg.forEach(r=>{
-if(!pass(r,"peg"))return;
-let c=coord(r); if(!c)return;
+DATA.pegawai.forEach(r=>{
+let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"]);
+let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"]);
+if(lat===null||lng===null) return;
 
-L.marker(c,{icon:iPeg})
-.bindPopup(`
-<div class="popup">
-<b>🧑‍💼 PEGAWAI</b><hr>
-<b>Nama:</b> ${safe(r["Nama"])}<br>
-<b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
-<b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
-<b>Alamat:</b> ${safe(r["Alamat"])}<br>
-${gmaps(c[0],c[1])}
-</div>
-`)
-.addTo(Lpeg);
+L.marker([lat,lng],{icon:iconPeg})
+.bindPopup(`<b>${safeFull(r["Nama"])}</b>${mapsLink(lat,lng)}`)
+.addTo(layerPeg);
 });
 
-// JUMAT
-DATA.jum.forEach(r=>{
-if(!pass(r,"jum"))return;
-let c=coord(r); if(!c)return;
+DATA.jumat.forEach(r=>{
+let lat=f(r["Titik Koordinat (Y)"]);
+let lng=f(r["Titik Koordinat (x)"]);
+if(lat===null||lng===null) return;
 
-L.marker(c,{icon:iJum})
-.bindPopup(`
-<div class="popup">
-<b>📍 JUMAT MENANAM</b><hr>
-<b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
-<b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
-<b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
-<b>Luas:</b> ${safe(r["Luas Rencana Penanaman (Ha)"])} Ha<br>
-${gmaps(c[0],c[1])}
-</div>
-`)
-.addTo(Ljum);
+L.marker([lat,lng],{icon:iconJum})
+.bindPopup(`<b>${safeFull(r["Kabupaten/Kota"])}</b>${mapsLink(lat,lng)}`)
+.addTo(layerJum);
 });
 
 updateChart();
@@ -236,66 +278,38 @@ function updateChart(){
 charts.forEach(c=>c.destroy());
 charts=[];
 
-function make(id,data){
-charts.push(new Chart(document.getElementById(id),{
+charts.push(new Chart(document.getElementById("c5"),{
 type:'doughnut',
-data:{labels:Object.keys(data),datasets:[{data:Object.values(data)}]},
-options:{responsive:true,aspectRatio:1,cutout:"40%"}
+data:{
+labels:["PJL","Persemaian","Pegawai","Jumat"],
+datasets:[{
+data:[
+DATA.pjl.length,
+DATA.persemaian.length,
+DATA.pegawai.length,
+DATA.jumat.length
+]
+}]
+}
 }));
-}
 
-function count(arr){
-let c={};
-arr.forEach(r=>{
-if(!pass(r))return;
-let u=r["Unit Kerja"]||"Unknown";
-c[u]=(c[u]||0)+1;
-});
-return c;
-}
-
-make("c1",count(DATA.pjl));
-make("c2",count(DATA.per));
-make("c3",count(DATA.peg));
-make("c4",count(DATA.jum));
 }
 
 // ================= LOAD =================
-function load(url,key){
-Papa.parse(url,{
-download:true,
-header:true,
-complete:r=>{
-DATA[key]=DATA[key].concat(r.data);
-fillDropdown();
-render();
-}
-});
-}
-
-function fillDropdown(){
-let s=f_unitPegawai;
-s.innerHTML='<option value="">Semua</option>';
-[...new Set(DATA.peg.map(x=>x["Unit Kerja"]))].forEach(v=>{
-if(v)s.innerHTML+=`<option>${v}</option>`;
-});
-}
-
-// ================= URL =================
 
 // PJL
 ["1107501735","1715712076","1053237933","1784821909","946859661","96096761","1779255843","635466960","360434997"]
-.forEach(g=>load(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&output=csv`,"pjl"));
+.forEach(g=>loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&output=csv`,"pjl"));
 
-// PER
+// PERSEMAIAN
 ["1149553688","1364517698","144675684","1843729244","1981250821","1159710704","1142124495","420074128","1536834083"]
-.forEach(g=>load(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&output=csv`,"per"));
+.forEach(g=>loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&output=csv`,"persemaian"));
 
-// PEG
-load("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&output=csv","peg");
+// PEGAWAI
+loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&output=csv","pegawai");
 
-// JUM
-load("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&output=csv","jum");
+// JUMAT
+loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&output=csv","jumat");
 
 </script>
 </body>
