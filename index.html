@@ -75,6 +75,9 @@ function toFloat(v){
     if(!v) return null;
     return parseFloat(v.toString().replace(",",".").replace(/[^0-9.-]/g,""));
 }
+function gmaps(lat,lng){
+    return `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">📍 Buka di Google Maps</a>`;
+}
 
 // ================= DATA =================
 let DATA = {pjl:[],persemaian:[],pegawai:[],jumat:[]};
@@ -111,23 +114,36 @@ loadCSV("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqP
 
 // ================= GEO =================
 let geoKab;
+
 fetch("Jawa Barattt.geojson")
-.then(r=>r.json())
+.then(res=>res.json())
 .then(data=>{
-geoKab=L.geoJSON(data,{
+geoKab = L.geoJSON(data,{
 style:{color:"black",weight:1,fillOpacity:0},
 onEachFeature:(f,l)=>{
-l.on("click",()=>{
-FILTER.kab=f.properties.KAB_KOTA;
-refresh();
-});
+
+    const nama = f.properties.KAB_KOTA;
+
+    // isi dropdown kabupaten
+    const el = document.getElementById("fkab");
+    if(el && ![...el.options].some(o=>o.value===nama)){
+        el.innerHTML += `<option>${nama}</option>`;
+    }
+
+    l.on("click",()=>{
+        FILTER.kab = nama;
+        refresh();
+        map.fitBounds(l.getBounds());
+    });
 }
 }).addTo(map);
 });
 
+// ================= GET KAB =================
 function getKab(lat,lng){
 let hasil=null;
 if(!geoKab) return null;
+
 geoKab.eachLayer(l=>{
 if(turf.booleanPointInPolygon(turf.point([lng,lat]),l.feature)){
 hasil=l.feature.properties.KAB_KOTA;
@@ -171,14 +187,6 @@ return true;
 });
 }
 
-<!-- HANYA BAGIAN RENDER YANG DIGANTI -->
-<script>
-
-// ================= GOOGLE MAP LINK =================
-function gmaps(lat,lng){
-    return `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">📍 Buka di Google Maps</a>`;
-}
-
 // ================= RENDER =================
 function refresh(){
 
@@ -187,7 +195,7 @@ layerPersemaian.clearLayers();
 layerPegawai.clearLayers();
 layerJumat.clearLayers();
 
-// ================= PJL =================
+// PJL
 filterData(DATA.pjl).forEach(r=>{
 let lat=toFloat(r["Titik Koordinat Penanaman (Y)"]);
 let lng=toFloat(r["Titik Koordinat Penanaman (X)"]);
@@ -199,13 +207,13 @@ let html=`
 <b>Kawasan Leuweung/Gunung:</b> ${safe(r["Kawasan Leuweung/ Gunung"])}<br>
 <b>Koordinat Penanaman:</b> ${safe(r["Titik Koordinat Penanaman (X)"])} , ${safe(r["Titik Koordinat Penanaman (Y)"])}<br>
 <b>Koordinat Persemaian:</b> ${safe(r["Titik Koordinat Persemaian (X)"])} , ${safe(r["Titik Koordinat Persemaian (Y)"])}<br>
-<b>Pemangku Penanaman/Pemilik Lahan:</b> ${safe(r["Pemangku Penanaman/ Pemilik Lahan"])}<br>
-<b>Wilayah Binaan Kuncen:</b> ${safe(r["Wilayah Binaan Kuncen"])}<br>
-<b>Wilayah Binaan Jaga Leuweung:</b> ${safe(r["Wilayah Binaan Jaga Leuweung"])}<br>
-<b>Penyuluh Kehutanan:</b> ${safe(r["Penyuluh Kehutanan"])}<br>
+<b>Pemangku Lahan:</b> ${safe(r["Pemangku Penanaman/ Pemilik Lahan"])}<br>
+<b>Wilayah Kuncen:</b> ${safe(r["Wilayah Binaan Kuncen"])}<br>
+<b>Wilayah JL:</b> ${safe(r["Wilayah Binaan Jaga Leuweung"])}<br>
+<b>Penyuluh:</b> ${safe(r["Penyuluh Kehutanan"])}<br>
 <b>PEH:</b> ${safe(r["Pengendali Ekosistem Hutan (PEH)"])}<br>
-<b>BA Jaga Leuweung:</b> ${safe(r["Upload Link BA Jaga Leuweung (Validasi, surat pengantar desa, dll.)"])}<br>
-<b>SK Penetapan:</b> ${safe(r["Upload Link SK Penetapan / Penerima Manfaat Jaga Leuweung"])}<br>
+<b>BA:</b> ${safe(r["Upload Link BA Jaga Leuweung (Validasi, surat pengantar desa, dll.)"])}<br>
+<b>SK:</b> ${safe(r["Upload Link SK Penetapan / Penerima Manfaat Jaga Leuweung"])}<br>
 <hr>
 ${gmaps(lat,lng)}
 `;
@@ -215,7 +223,7 @@ L.marker([lat,lng],{icon:iconPJL})
 .bindPopup(`<div style="max-height:260px;overflow:auto">${html}</div>`);
 });
 
-// ================= PERSEMAIAN =================
+// Persemaian
 filterData(DATA.persemaian).forEach(r=>{
 let lat=toFloat(r["latitude"]);
 let lng=toFloat(r["longitude"]);
@@ -224,16 +232,11 @@ if(!lat||!lng) return;
 let html=`
 <b>Unit Kerja:</b> ${safe(r["Unit Kerja"])}<br>
 <b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
-<b>Desa/Kelurahan:</b> ${safe(r["Desa/ Kelurahan"])}<br>
-<b>Blok:</b> ${safe(r["Blok"])}<br>
-<b>Nama Personil Jaga Leuweung:</b> ${safe(r["Nama Personil Jaga leuweung"])}<br>
-<b>Status Persemaian:</b> ${safe(r["Status Persemaian"])}<br>
-<b>Tahapan Kegiatan:</b> ${safe(r["Tahapan Kegiatan"])}<br>
+<b>Desa:</b> ${safe(r["Desa/ Kelurahan"])}<br>
+<b>Status:</b> ${safe(r["Status Persemaian"])}<br>
+<b>Tahapan:</b> ${safe(r["Tahapan Kegiatan"])}<br>
 <b>Luas:</b> ${safe(r["Luas (Ha)"])} Ha<br>
-<b>Target Bibit:</b> ${safe(r["Target Bibit"])}<br>
-<b>Realisasi Bibit:</b> ${safe(r["Realisasi Bibit"])}<br>
 <b>Koordinat:</b> ${lat}, ${lng}<br>
-<b>Keterangan:</b> ${safe(r["Keterangan"])}<br>
 <hr>
 ${gmaps(lat,lng)}
 `;
@@ -243,7 +246,7 @@ L.marker([lat,lng],{icon:iconPersemaian})
 .bindPopup(`<div style="max-height:260px;overflow:auto">${html}</div>`);
 });
 
-// ================= PEGAWAI =================
+// Pegawai
 filterData(DATA.pegawai).forEach(r=>{
 let lat=toFloat(r["latitude"]);
 let lng=toFloat(r["longitude"]);
@@ -251,10 +254,9 @@ if(!lat||!lng) return;
 
 let html=`
 <b>Nama:</b> ${safe(r["Nama"])}<br>
-<b>Unit Kerja:</b> ${safe(r["Unit Kerja"])}<br>
-<b>Nama Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
+<b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+<b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
 <b>Alamat:</b> ${safe(r["Alamat"])}<br>
-<b>Koordinat:</b> ${lat}, ${lng}<br>
 <hr>
 ${gmaps(lat,lng)}
 `;
@@ -264,24 +266,18 @@ L.marker([lat,lng],{icon:iconPegawai})
 .bindPopup(`<div style="max-height:260px;overflow:auto">${html}</div>`);
 });
 
-// ================= JUMAT =================
+// Jumat
 filterData(DATA.jumat).forEach(r=>{
 let lat=toFloat(r["Titik Koordinat (Y)"]);
 let lng=toFloat(r["Titik Koordinat (x)"]);
 if(!lat||!lng) return;
 
 let html=`
-<b>Unit Kerja:</b> ${safe(r["Unit Kerja"])}<br>
-<b>Kabupaten/Kota:</b> ${safe(r["Kabupaten/Kota"])}<br>
+<b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+<b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
 <b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
-<b>Desa/Kelurahan:</b> ${safe(r["Desa/Kelurahan"])}<br>
-<b>Blok:</b> ${safe(r["Blok"])}<br>
-<b>DAS:</b> ${safe(r["DAS"])}<br>
-<b>Sub DAS:</b> ${safe(r["Sub DAS"])}<br>
-<b>Koordinat:</b> ${lat}, ${lng}<br>
-<b>Luas Rencana Penanaman:</b> ${safe(r["Luas Rencana Penanaman (Ha)"])} Ha<br>
-<b>Panjang Rencana:</b> ${safe(r["Panjang Rencana Penanaman (Km)"])} Km<br>
-<b>Keterangan:</b> ${safe(r["Keterangan"])}<br>
+<b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
+<b>Luas:</b> ${safe(r["Luas Rencana Penanaman (Ha)"])} Ha<br>
 <hr>
 ${gmaps(lat,lng)}
 `;
@@ -289,19 +285,6 @@ ${gmaps(lat,lng)}
 L.marker([lat,lng],{icon:iconJumat})
 .addTo(layerJumat)
 .bindPopup(`<div style="max-height:260px;overflow:auto">${html}</div>`);
-});
-
-updateChart();
-}
-
-// ================= CHART =================
-let chart;
-
-function updateChart(){
-let stat={};
-filterData(DATA.pjl).forEach(d=>{
-let u=normalize(d);
-stat[u]=(stat[u]||0)+1;
 });
 }
 
@@ -313,16 +296,14 @@ const div=L.DomUtil.create("div","filter-box");
 div.innerHTML=`
 <b>Filter</b>
 
-<select id="funit"><option value="">Semua</option>
+<select id="funit">
+<option value="">Semua</option>
 <option>CDK I</option><option>CDK II</option><option>CDK III</option>
 <option>CDK IV</option><option>CDK V</option><option>CDK VI</option>
 <option>CDK VII</option><option>CDK VIII</option><option>CDK IX</option>
 </select>
 
 <select id="fkab"><option value="">Kabupaten</option></select>
-<select id="fstatus"><option value="">Status</option></select>
-<select id="fkawasan"><option value="">Kawasan</option></select>
-<select id="fpenyuluh"><option value="">Penyuluh</option></select>
 
 <button onclick="applyFilter()">Apply</button>
 <button onclick="resetFilter()">Reset</button>
@@ -335,9 +316,6 @@ ui.addTo(map);
 function applyFilter(){
 FILTER.unit=document.getElementById("funit").value;
 FILTER.kab=document.getElementById("fkab").value;
-FILTER.status=document.getElementById("fstatus").value;
-FILTER.kawasan=document.getElementById("fkawasan").value;
-FILTER.penyuluh=document.getElementById("fpenyuluh").value;
 refresh();
 }
 
@@ -347,7 +325,9 @@ refresh();
 }
 
 // ================= INIT =================
-setTimeout(()=>{refresh();},4000);
+setTimeout(()=>{
+if(DATA.pjl.length>0) refresh();
+},4000);
 
 </script>
 </body>
