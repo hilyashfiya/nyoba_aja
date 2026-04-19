@@ -447,9 +447,31 @@ options:{plugins:{legend:{display:false},title:{display:true,text:"Statistik Wil
 });
 }
 
-// LOAD DATA (punya kamu tetap)
-["1107501735","1715712076"].forEach(g=>
-loadCSV(`https://docs.google.com/spreadsheets/d/e/...gid=${g}&output=csv`,"pjl"));
+// ================= LOAD =================
+
+// PJL
+["1107501735","1715712076","1053237933","1784821909","946859661","96096761","1779255843","635466960","360434997"]
+.forEach(g=>loadCSV(
+`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&single=true&output=csv`
+,"pjl"));
+
+// PERSEMAIAN
+["1149553688","1364517698","144675684","1843729244","1981250821","1159710704","1142124495","420074128","1536834083"]
+.forEach(g=>loadCSV(
+`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&single=true&output=csv`
+,"persemaian"));
+
+// PEGAWAI
+loadCSV(
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv",
+"pegawai"
+);
+
+// JUMAT
+loadCSV(
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv",
+"jumat"
+);
 
 </script>
 </body>
