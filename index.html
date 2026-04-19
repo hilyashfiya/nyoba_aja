@@ -112,10 +112,10 @@ label{font-size:13px;}
 
 <div class="legend" id="legendBox">
 <b>Legenda</b><br>
-🧑‍🌾 PJL<br>
-🌱 Persemaian<br>
-🧑‍💼 Pegawai<br>
-📍 Jumat
+🧑‍🌾 Petugas Jaga Leuweung<br>
+🌱 Lokasi Persemaian Jaga Leuweung<br>
+🧑‍💼 Pegawai Dinas Kehutanan<br>
+📍 Lokasi Unggulan Jumat Menanam
 </div>
 
 <script>
@@ -168,6 +168,26 @@ let loadedCSV = 0;
 
 // ================= HELPER TAMBAHAN =================
 const safe=v=>v||"-";
+
+// ✅ TAMBAHKAN DI SINI
+function safeFull(v){
+return (v===undefined || v===null || v==="") ? "Data tidak tersedia" : v;
+}
+
+function gabungKoordinat(x,y){
+if(!x || !y) return "Data tidak tersedia";
+return `${x} , ${y}`;
+}
+
+function linkifyFull(url,label){
+if(!url || url==="Data tidak tersedia") return "Data tidak tersedia";
+return `<a href="${url}" target="_blank">${label}</a>`;
+}
+
+function mapsLink(lat,lng){
+if(!lat || !lng) return "";
+return `<br><a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">📍 Buka di Google Maps</a>`;
+}
 
 // ================= FILTER APPLY (REAL-TIME) =================
 function applyFilter(){
@@ -243,7 +263,7 @@ let lng = r["longitude"]!==undefined && r["longitude"]!==""
 : f(r["Titik Koordinat (x)"]);
 
 if(lat && lng){
-r._kab=""; // nanti bisa isi dari geojson kalau mau
+r._kab = r["Kabupaten/Kota"] || r["Kabupaten"] || "";
 }
 });
 
