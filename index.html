@@ -66,13 +66,21 @@
     </style>
 </head>
 <body>
-
 <div id="map"></div>
 
 <!-- Control Panel -->
 <div class="control-panel">
     <h3>🔎 Filter Data</h3>
     
+    <!-- Basemap Baru -->
+    <label>🌐 Basemap:</label>
+    <select id="basemapSelect" onchange="switchBasemap(this.value)">
+        <option value="osm">OpenStreetMap (Default)</option>
+        <option value="esriStreet">ESRI Street</option>
+        <option value="satellite">ESRI Satellite</option>
+        <option value="terrain">Medan / Terrain</option>
+    </select>
+
     <label>CDK Unit Kerja:</label>
     <select id="filterCDK" onchange="applyFilters()">
         <option value="">Semua CDK</option>
@@ -86,36 +94,36 @@
         <option value="CDK 8">CDK 8</option>
         <option value="CDK 9">CDK 9</option>
     </select>
-
+    
     <label>Unit Kerja Pegawai:</label>
     <select id="filterPegawai" onchange="applyFilters()">
         <option value="">Semua Unit Pegawai</option>
     </select>
-
+    
     <label>Kabupaten/Kota:</label>
     <select id="filterKabupaten" onchange="applyFilters()">
         <option value="">Semua Kabupaten</option>
     </select>
-
+    
     <label>Status Persemaian:</label>
     <select id="filterStatus" onchange="applyFilters()">
         <option value="">Semua Status</option>
     </select>
-
+    
     <label>Kawasan (PJL):</label>
     <select id="filterKawasan" onchange="applyFilters()">
         <option value="">Semua Kawasan</option>
     </select>
-
+    
     <label>Penyuluh (PJL):</label>
     <select id="filterPenyuluh" onchange="applyFilters()">
         <option value="">Semua Penyuluh</option>
     </select>
-
+    
     <button onclick="resetFilters()" style="margin-top:10px; background:#007bff; color:white; border:none; padding:10px;">Reset Semua Filter</button>
 </div>
 
-<!-- Legend -->
+<!-- Legend (sudah bisa klik hide/unhide per layer) -->
 <div class="legend">
     <h3>Layer Peta</h3>
     <button id="btnPJL" class="active" onclick="toggleLayer('pjl')">📍 PJL</button>
@@ -141,13 +149,14 @@ let layerPJL = L.layerGroup();
 let layerPersemaian = L.layerGroup();
 let layerPegawai = L.layerGroup();
 let layerJumat = L.layerGroup();
-
 let DATA = { pjl: [], persemaian: [], pegawai: [], jumat: [] };
 let charts = [];
 let currentFilters = {
     cdk: "", pegawaiUnit: "", kabupaten: "", status: "", kawasan: "", penyuluh: ""
 };
 let layerVisibility = { pjl: true, persemaian: true, pegawai: true, jumat: true };
+let basemaps = {};
+let currentBasemapLayer;
 
 // Icons
 const iconPJL = L.divIcon({className: 'custom-icon', html: '📍', iconSize: [30,30]});
@@ -164,35 +173,79 @@ function getCDK(unit) {
     return match ? match[0].toUpperCase() : null;
 }
 
-// ================== INITIALIZE MAP ==================
-function initMap() {
-    map = L.map('map').setView([-2.5, 118], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    layerPJL.addTo(map);
-    layerPersemaian.addTo(map);
-    layerPegawai.addTo(map);
-    layerJumat.addTo(map);
+// ================== ROBUST COORDINATE PARSER ==================
+function getLatLng(row, type) {
+    let latKeys = [], lngKeys = [];
+    if (type === 'pjl' || type === 'jumat') {
+        latKeys = ["Titik Koordinat (Y)", "latitude", "Lat", "Y", "Titik Koordinat Y"];
+        lngKeys = ["Titik Koordinat (x)", "longitude", "Lng", "X", "Titik Koordinat X"];
+    } else if (type === 'persemaian') {
+        latKeys = ["Titik Koordinat (Y)", "latitude", "Lat", "Y", "Titik Koordinat Y"];
+        lngKeys = ["Titik Koordinat (x)", "longitude", "Lng", "X", "Titik Koordinat X"];
+    } else if (type === 'pegawai') {
+        latKeys = ["latitude", "Titik Koordinat (Y)", "Lat", "Y"];
+        lngKeys = ["longitude", "Titik Koordinat (x)", "Lng", "X"];
+    }
+    let lat = null, lng = null;
+    for (let k of latKeys) {
+        if (row[k] && f(row[k]) !== null) { lat = f(row[k]); break; }
+    }
+    for (let k of lngKeys) {
+        if (row[k] && f(row[k]) !== null) { lng = f(row[k]); break; }
+    }
+    return [lat, lng];
 }
 
-// ================== LOAD CSV ==================
+// ================== IMPROVED CSV PARSER (handle koma di dalam field) ==================
+function parseCSV(text) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length === 0) return [];
+    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const row = [];
+        let cell = '';
+        let inQuotes = false;
+        let j = 0;
+        while (j < lines[i].length) {
+            const char = lines[i][j];
+            if (char === '"') {
+                if (inQuotes && lines[i][j + 1] === '"') {
+                    cell += '"';
+                    j += 2;
+                    continue;
+                }
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                row.push(cell.trim());
+                cell = '';
+            } else {
+                cell += char;
+            }
+            j++;
+        }
+        row.push(cell.trim());
+        const obj = {};
+        headers.forEach((h, idx) => {
+            obj[h] = (row[idx] || "").replace(/^"|"$/g, '').trim();
+        });
+        data.push(obj);
+    }
+    return data.filter(r => Object.keys(r).length > 1);
+}
+
+// ================== LOAD CSV (APPEND untuk multiple sheet) ==================
 async function loadCSV(url, type) {
     try {
         const res = await fetch(url);
         const text = await res.text();
-        const rows = text.split('\n').map(r => r.split(',').map(cell => cell.replace(/^"|"$/g, '').trim()));
-        const headers = rows[0];
-        const data = rows.slice(1).map(row => {
-            let obj = {};
-            headers.forEach((h,i) => { obj[h] = row[i] || ""; });
-            return obj;
-        });
-        DATA[type] = data.filter(r => r && Object.keys(r).length > 1);
-        console.log(`✅ Loaded ${DATA[type].length} data ${type}`);
+        const parsedData = parseCSV(text);
+        if (!DATA[type]) DATA[type] = [];
+        DATA[type].push(...parsedData);
+        console.log(`✅ Loaded ${parsedData.length} data for ${type} from ${url}`);
     } catch(e) {
-        console.error(`Failed loading ${type}`, e);
+        console.error(`Failed loading ${type} from ${url}`, e);
     }
 }
 
@@ -213,7 +266,6 @@ function createPJLPopup(r, lat, lng) {
         ${mapsLink(lat,lng)}
     </div>`;
 }
-
 function createPersemaianPopup(r, lat, lng) {
     return `
     <div style="max-height:320px;overflow:auto;font-size:12px;line-height:1.5">
@@ -227,7 +279,6 @@ function createPersemaianPopup(r, lat, lng) {
         ${mapsLink(lat,lng)}
     </div>`;
 }
-
 function createPegawaiPopup(r, lat, lng) {
     return `
     <div style="max-height:280px;overflow:auto;font-size:12px;line-height:1.5">
@@ -240,7 +291,6 @@ function createPegawaiPopup(r, lat, lng) {
         ${mapsLink(lat,lng)}
     </div>`;
 }
-
 function createJumatPopup(r, lat, lng) {
     return `
     <div style="max-height:320px;overflow:auto;font-size:12px;line-height:1.5">
@@ -260,7 +310,7 @@ function createJumatPopup(r, lat, lng) {
     </div>`;
 }
 
-// ================== ADD MARKERS WITH FILTER ==================
+// ================== ADD MARKERS ==================
 function addMarkers() {
     layerPJL.clearLayers();
     layerPersemaian.clearLayers();
@@ -274,11 +324,8 @@ function addMarkers() {
         if (cdkFilter && getCDK(r["Unit Kerja"]) !== cdkFilter) return;
         if (currentFilters.kawasan && r["Kawasan"] !== currentFilters.kawasan) return;
         if (currentFilters.penyuluh && r["Penyuluh"] !== currentFilters.penyuluh) return;
-
-        let lat = f(r["Titik Koordinat (Y)"]) || f(r["latitude"]);
-        let lng = f(r["Titik Koordinat (x)"]) || f(r["longitude"]);
+        const [lat, lng] = getLatLng(r, 'pjl');
         if (!lat || !lng) return;
-
         L.marker([lat, lng], {icon: iconPJL})
           .bindPopup(createPJLPopup(r, lat, lng))
           .addTo(layerPJL);
@@ -289,25 +336,19 @@ function addMarkers() {
         if (cdkFilter && getCDK(r["Unit Kerja"]) !== cdkFilter) return;
         if (currentFilters.status && r["Status"] !== currentFilters.status) return;
         if (currentFilters.kabupaten && r["Kabupaten/Kota"] !== currentFilters.kabupaten) return;
-
-        let lat = f(r["Titik Koordinat (Y)"]) || f(r["latitude"]);
-        let lng = f(r["Titik Koordinat (x)"]) || f(r["longitude"]);
+        const [lat, lng] = getLatLng(r, 'persemaian');
         if (!lat || !lng) return;
-
         L.marker([lat, lng], {icon: iconPers})
           .bindPopup(createPersemaianPopup(r, lat, lng))
           .addTo(layerPersemaian);
     });
 
-    // Pegawai
+    // Pegawai (menggunakan field "Unit Kerja" dari sheet pegawai)
     DATA.pegawai.forEach(r => {
         if (cdkFilter && getCDK(r["Unit Kerja"]) !== cdkFilter) return;
         if (currentFilters.pegawaiUnit && r["Unit Kerja"] !== currentFilters.pegawaiUnit) return;
-
-        let lat = f(r["latitude"]) || f(r["Titik Koordinat (Y)"]);
-        let lng = f(r["longitude"]) || f(r["Titik Koordinat (x)"]);
+        const [lat, lng] = getLatLng(r, 'pegawai');
         if (!lat || !lng) return;
-
         L.marker([lat, lng], {icon: iconPeg})
           .bindPopup(createPegawaiPopup(r, lat, lng))
           .addTo(layerPegawai);
@@ -317,11 +358,8 @@ function addMarkers() {
     DATA.jumat.forEach(r => {
         if (cdkFilter && getCDK(r["Unit Kerja"]) !== cdkFilter) return;
         if (currentFilters.kabupaten && r["Kabupaten/Kota"] !== currentFilters.kabupaten) return;
-
-        let lat = f(r["Titik Koordinat (Y)"]);
-        let lng = f(r["Titik Koordinat (x)"]);
+        const [lat, lng] = getLatLng(r, 'jumat');
         if (!lat || !lng) return;
-
         L.marker([lat, lng], {icon: iconJum})
           .bindPopup(createJumatPopup(r, lat, lng))
           .addTo(layerJumat);
@@ -332,7 +370,7 @@ function addMarkers() {
 
 // ================== FILTER POPULATION ==================
 function populateFilterOptions() {
-    // Unit Kerja Pegawai
+    // Unit Kerja Pegawai (dari sheet data pegawai)
     const pegUnits = [...new Set(DATA.pegawai.map(r => r["Unit Kerja"]).filter(Boolean))].sort();
     const pegSelect = document.getElementById('filterPegawai');
     pegUnits.forEach(u => {
@@ -379,6 +417,8 @@ function populateFilterOptions() {
         opt.value = p; opt.textContent = p;
         penSelect.appendChild(opt);
     });
+
+    console.log('✅ Filter dropdowns populated');
 }
 
 // ================== APPLY FILTERS ==================
@@ -402,11 +442,10 @@ function resetFilters() {
     applyFilters();
 }
 
-// ================== TOGGLE LAYER ==================
+// ================== TOGGLE LAYER (LEGEND) ==================
 function toggleLayer(type) {
     const btn = document.getElementById(`btn${type.charAt(0).toUpperCase() + type.slice(1)}`);
     layerVisibility[type] = !layerVisibility[type];
-
     if (layerVisibility[type]) {
         btn.classList.add('active');
         if (type === 'pjl') layerPJL.addTo(map);
@@ -422,11 +461,17 @@ function toggleLayer(type) {
     }
 }
 
+// ================== BASemap SWITCHER ==================
+function switchBasemap(name) {
+    if (currentBasemapLayer) map.removeLayer(currentBasemapLayer);
+    currentBasemapLayer = basemaps[name];
+    currentBasemapLayer.addTo(map);
+}
+
 // ================== CHART ==================
 function updateChart() {
     charts.forEach(c => c.destroy());
     charts = [];
-
     const cdkFilter = currentFilters.cdk;
 
     const countByCDK = (arr) => {
@@ -461,7 +506,10 @@ function updateChart() {
             type: 'doughnut',
             data: {
                 labels: Object.keys(data),
-                datasets: [{ data: Object.values(data), backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#E91E63', '#9C27B0'] }]
+                datasets: [{ 
+                    data: Object.values(data), 
+                    backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#E91E63', '#9C27B0', '#00BCD4', '#FF5722', '#607D8B', '#8BC34A']
+                }]
             },
             options: {
                 responsive: true,
@@ -474,21 +522,50 @@ function updateChart() {
         }));
     }
 
-    makeChart("c1", countByCDK(DATA.pjl), "PJL");
-    makeChart("c2", countByCDK(DATA.persemaian), "Persemaian");
+    makeChart("c1", countByCDK(DATA.pjl), "PJL per CDK");
+    makeChart("c2", countByCDK(DATA.persemaian), "Persemaian per CDK");
     makeChart("c3", countPegawai(), "Pegawai");
-    makeChart("c4", countByCDK(DATA.jumat), "Jumat");
-    makeChart("c5", agg, "Total");
+    makeChart("c4", countByCDK(DATA.jumat), "Jumat Menanam per CDK");
+    makeChart("c5", agg, "Total Keseluruhan");
 }
 
-// ================== LOAD ALL DATA ==================
+// ================== INITIALIZE MAP + BASEMAPS ==================
+function initMap() {
+    map = L.map('map').setView([-2.5, 118], 5);
+
+    // Basemaps
+    basemaps.osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    });
+    basemaps.esriStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri'
+    });
+    basemaps.satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics'
+    });
+    basemaps.terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenTopoMap contributors'
+    });
+
+    // Default OSM
+    currentBasemapLayer = basemaps.osm;
+    currentBasemapLayer.addTo(map);
+
+    // Tambahkan semua layer group
+    layerPJL.addTo(map);
+    layerPersemaian.addTo(map);
+    layerPegawai.addTo(map);
+    layerJumat.addTo(map);
+}
+
+// ================== LOAD ALL DATA (MULTIPLE SHEET DILOAD SEMUA) ==================
 async function loadAllData() {
     await Promise.all([
-        // PJL
+        // PJL - semua tab (9 gid)
         ...["1107501735","1715712076","1053237933","1784821909","946859661","96096761","1779255843","635466960","360434997"]
             .map(g => loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&single=true&output=csv`, "pjl")),
         
-        // Persemaian
+        // Persemaian - semua tab (9 gid)
         ...["1149553688","1364517698","144675684","1843729244","1981250821","1159710704","1142124495","420074128","1536834083"]
             .map(g => loadCSV(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&single=true&output=csv`, "persemaian")),
         
@@ -502,6 +579,7 @@ async function loadAllData() {
     initMap();
     populateFilterOptions();
     addMarkers();
+    console.log('🚀 Dashboard siap! Titik, popup, dropdown, statistik, dan basemap sudah aktif.');
 }
 
 // Start Application
