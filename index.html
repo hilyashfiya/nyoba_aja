@@ -18,6 +18,26 @@
 html, body {margin:0; padding:0;}
 #map {height:100vh;}
 
+.filter-box{
+    background:white;
+    padding:10px;
+    border-radius:10px;
+    font-size:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.2);
+    max-height:400px;
+    overflow:auto;
+}
+
+.filter-box select{
+    width:100%;
+    margin-bottom:5px;
+}
+
+canvas{
+    width:100% !important;
+    height:200px !important;
+}
+
 .title {
     position:absolute;
     top:10px;
@@ -410,33 +430,34 @@ function getKab(lat,lng){
     return hasil;
 }
 
-// ================= FIX PARSING CDK =================
+// ================= FIX CDK =================
 function getCDK(val){
     if(!val) return null;
     const match = val.match(/CDK\s*Wilayah\s*[IVX]+/i) || val.match(/CDK\s*[IVX]+/i);
-    return match ? match[0].replace("Wilayah","").trim() : null;
+    if(!match) return null;
+    return match[0].replace("Wilayah","").trim();
 }
 
-// ================= FIX COUNT =================
-function countByUnitFixed(data, field){
+// ================= NORMALIZE UNIT =================
+function normalizeUnit(d){
+    let u = d["Unit Kerja"] || "";
+    const cdk = getCDK(u);
+    return cdk ? cdk : u;
+}
+
+// ================= COUNT =================
+function countData(data){
     const res = {};
     data.forEach(d=>{
-        let val = d[field];
-
-        if(field === "Unit Kerja"){
-            const cdk = getCDK(val);
-            if(cdk) val = cdk;
-        }
-
-        if(!val || val==="") return;
-
-        res[val] = (res[val] || 0) + 1;
+        const u = normalizeUnit(d);
+        if(!u) return;
+        res[u] = (res[u]||0)+1;
     });
     return res;
 }
 
-// ================= FIX CHART =================
-function renderChartFixed(id,data,title){
+// ================= CHART =================
+function renderChart(id,data,title){
 
     const labels = Object.keys(data);
     const values = Object.values(data);
@@ -453,11 +474,13 @@ function renderChartFixed(id,data,title){
             }]
         },
         options:{
+            responsive:true,
+            maintainAspectRatio:false,
             plugins:{
-                legend:{display:false}, // 🔥 hilangkan tulisan bawah
+                legend:{display:false},
                 tooltip:{
                     callbacks:{
-                        label:(ctx)=>`${ctx.label} : ${ctx.raw}`
+                        label:(ctx)=> ctx.label + " : " + ctx.raw
                     }
                 },
                 title:{display:true,text:title}
@@ -465,147 +488,245 @@ function renderChartFixed(id,data,title){
             onClick:(evt,elements)=>{
                 if(elements.length){
                     const label = labels[elements[0].index];
-                    applyChartFilter(label);
+                    FILTER.unit = label;
+                    applyFilter();
                 }
             }
         }
     });
 }
 
-// ================= UPDATE STAT =================
-function updateStatFixed(dataOverride=null){
-
-    const src = dataOverride || DATA;
-
-    renderChartFixed("chart1",countByUnitFixed(src.pjl,"Unit Kerja"),"PJL");
-    renderChartFixed("chart2",countByUnitFixed(src.persemaian,"Unit Kerja"),"Persemaian");
-    renderChartFixed("chart3",countByUnitFixed(src.pegawai,"Unit Kerja"),"Pegawai");
-    renderChartFixed("chart4",countByUnitFixed(src.jumat,"Unit Kerja"),"Jumat Menanam");
-}
-
 // ================= FILTER STATE =================
 let FILTER = {
-    cdk: [],
-    pegawaiUnit: [],
-    kabupaten: null,
-    penyuluh: "",
-    status: "",
-    kawasan: ""
+    unit:"",
+    kab:"",
+    status:"",
+    kawasan:"",
+    penyuluh:""
 };
 
 // ================= FILTER UI =================
 const filterUI = L.control({position:"topright"});
 filterUI.onAdd=function(){
-    const div = L.DomUtil.create("div","legend");
+
+    const div = L.DomUtil.create("div","filter-box");
 
     div.innerHTML = `
-    <b>FILTER</b><br>
+    <b>FILTER DATA</b><br>
 
-    <b>CDK</b><br>
-    ${["I","II","III","IV","V","VI","VII","VIII","IX"].map(c=>
-        `<label><input type="checkbox" class="fcdk" value="CDK ${c}" checked> CDK ${c}</label><br>`
-    ).join("")}
+    Unit Kerja
+    <select id="funit">
+        <option value="">Semua</option>
+        ${["CDK I","CDK II","CDK III","CDK IV","CDK V","CDK VI","CDK VII","CDK VIII","CDK IX"].map(x=>`<option>${x}</option>`).join("")}
+    </select>
 
-    <hr>
+    Kabupaten
+    <select id="fkab"><option value="">Semua</option></select>
 
-    <b>Penyuluh</b><br>
-    <input id="fpenyuluh"><br>
+    Status Persemaian
+    <select id="fstatus"><option value="">Semua</option></select>
 
-    <b>Status Persemaian</b><br>
-    <input id="fstatus"><br>
+    Kawasan
+    <select id="fkawasan"><option value="">Semua</option></select>
 
-    <b>Kawasan</b><br>
-    <input id="fkawasan"><br>
+    Penyuluh
+    <select id="fpenyuluh"><option value="">Semua</option></select>
 
-    <button onclick="applyFilterFull()">Apply</button>
+    <button onclick="applyFilter()">Apply</button>
+    <button onclick="resetFilter()">Reset</button>
     `;
 
     return div;
 };
 filterUI.addTo(map);
 
-// ================= FILTER LOGIC =================
-function applyFilterFull(){
+// ================= AUTO ISI DROPDOWN =================
+function populateDropdown(){
 
-    FILTER.cdk = [...document.querySelectorAll(".fcdk:checked")].map(e=>e.value);
-    FILTER.penyuluh = document.getElementById("fpenyuluh").value.toLowerCase();
-    FILTER.status = document.getElementById("fstatus").value.toLowerCase();
-    FILTER.kawasan = document.getElementById("fkawasan").value.toLowerCase();
+    const kabSet = new Set();
+    const statusSet = new Set();
+    const kawasanSet = new Set();
+    const penyuluhSet = new Set();
 
-    refreshMapAndChart();
-}
-
-// ================= CORE FILTER =================
-function filterDataAll(data){
-
-    return data.filter(d=>{
-
-        const unit = d["Unit Kerja"] || "";
-        const cdk = getCDK(unit);
-
-        if(FILTER.cdk.length && cdk && !FILTER.cdk.includes(cdk)) return false;
-
-        const penyuluh = (d["Penyuluh Kehutanan"]||"").toLowerCase();
-        if(FILTER.penyuluh && !penyuluh.includes(FILTER.penyuluh)) return false;
-
-        const status = (d["Status Persemaian"]||"").toLowerCase();
-        if(FILTER.status && !status.includes(FILTER.status)) return false;
-
-        const kawasan = (d["Kawasan Leuweung/ Gunung"]||"").toLowerCase();
-        if(FILTER.kawasan && !kawasan.includes(FILTER.kawasan)) return false;
+    [...DATA.pjl,...DATA.persemaian,...DATA.jumat].forEach(d=>{
 
         const lat = toFloat(d["latitude"]||d["Titik Koordinat (Y)"]||d["Titik Koordinat Penanaman (Y)"]);
         const lng = toFloat(d["longitude"]||d["Titik Koordinat (x)"]||d["Titik Koordinat Penanaman (X)"]);
 
-        if(FILTER.kabupaten){
+        if(lat && lng){
             const kab = getKab(lat,lng);
-            if(kab !== FILTER.kabupaten) return false;
+            if(kab) kabSet.add(kab);
         }
+
+        if(d["Status Persemaian"]) statusSet.add(d["Status Persemaian"]);
+        if(d["Kawasan Leuweung/ Gunung"]) kawasanSet.add(d["Kawasan Leuweung/ Gunung"]);
+        if(d["Penyuluh Kehutanan"]) penyuluhSet.add(d["Penyuluh Kehutanan"]);
+    });
+
+    function fill(id,set){
+        const el = document.getElementById(id);
+        [...set].sort().forEach(v=>{
+            el.innerHTML += `<option>${v}</option>`;
+        });
+    }
+
+    fill("fkab",kabSet);
+    fill("fstatus",statusSet);
+    fill("fkawasan",kawasanSet);
+    fill("fpenyuluh",penyuluhSet);
+}
+
+// ================= FILTER CORE =================
+function filterData(data){
+
+    return data.filter(d=>{
+
+        const unit = normalizeUnit(d);
+        if(FILTER.unit && unit !== FILTER.unit) return false;
+
+        const lat = toFloat(d["latitude"]||d["Titik Koordinat (Y)"]||d["Titik Koordinat Penanaman (Y)"]);
+        const lng = toFloat(d["longitude"]||d["Titik Koordinat (x)"]||d["Titik Koordinat Penanaman (X)"]);
+
+        if(FILTER.kab){
+            const kab = getKab(lat,lng);
+            if(kab !== FILTER.kab) return false;
+        }
+
+        if(FILTER.status && (d["Status Persemaian"]||"") !== FILTER.status) return false;
+        if(FILTER.kawasan && (d["Kawasan Leuweung/ Gunung"]||"") !== FILTER.kawasan) return false;
+        if(FILTER.penyuluh && (d["Penyuluh Kehutanan"]||"") !== FILTER.penyuluh) return false;
 
         return true;
     });
 }
 
-// ================= REFRESH =================
-function refreshMapAndChart(){
+// ================= APPLY FILTER =================
+function applyFilter(){
 
-    const pjl = filterDataAll(DATA.pjl);
-    const persemaian = filterDataAll(DATA.persemaian);
-    const pegawai = filterDataAll(DATA.pegawai);
-    const jumat = filterDataAll(DATA.jumat);
+    FILTER.unit = document.getElementById("funit").value;
+    FILTER.kab = document.getElementById("fkab").value;
+    FILTER.status = document.getElementById("fstatus").value;
+    FILTER.kawasan = document.getElementById("fkawasan").value;
+    FILTER.penyuluh = document.getElementById("fpenyuluh").value;
 
-    updateStatFixed({pjl,persemaian,pegawai,jumat});
+    refreshMap();
 }
 
-// ================= CHART CLICK FILTER =================
-function applyChartFilter(label){
-    FILTER.cdk = [label];
-    refreshMapAndChart();
+// ================= RESET =================
+function resetFilter(){
+    FILTER = {unit:"",kab:"",status:"",kawasan:"",penyuluh:""};
+    refreshMap();
 }
 
-// ================= POLYGON STYLE =================
+// ================= REFRESH MAP =================
+function refreshMap(){
+
+    layerPJL.clearLayers();
+    layerPersemaian.clearLayers();
+    layerPegawai.clearLayers();
+    layerJumat.clearLayers();
+
+    loadRender(filterData(DATA.pjl),"pjl");
+    loadRender(filterData(DATA.persemaian),"persemaian");
+    loadRender(filterData(DATA.pegawai),"pegawai");
+    loadRender(filterData(DATA.jumat),"jumat");
+
+    updateChart();
+}
+
+// ================= RENDER ULANG =================
+function loadRender(data,type){
+
+    if(type==="pjl"){
+        const grouped={};
+
+        data.forEach(r=>{
+            const lat = toFloat(r["Titik Koordinat Penanaman (Y)"]);
+            const lng = toFloat(r["Titik Koordinat Penanaman (X)"]);
+            const penyuluh = safe(r["Penyuluh Kehutanan"]);
+
+            if(!lat||!lng) return;
+
+            const key = lat+"_"+lng+"_"+penyuluh;
+            if(!grouped[key]) grouped[key]=[];
+            grouped[key].push(r);
+        });
+
+        Object.values(grouped).forEach(group=>{
+            const r=group[0];
+            const lat = toFloat(r["Titik Koordinat Penanaman (Y)"]);
+            const lng = toFloat(r["Titik Koordinat Penanaman (X)"]);
+
+            let html=`<b>Penyuluh:</b> ${safe(r["Penyuluh Kehutanan"])}<hr>`;
+
+            group.forEach(g=>{
+                html += `<b>Nama:</b> ${safe(g["Nama Lengkap"])}<hr>`;
+            });
+
+            L.marker([lat,lng],{icon:iconPJL}).addTo(layerPJL)
+            .bindPopup(`<div style="max-height:200px;overflow:auto">${html}</div>`);
+        });
+    }
+
+    if(type==="persemaian"){
+        data.forEach(r=>{
+            const lat = toFloat(r["latitude"]);
+            const lng = toFloat(r["longitude"]);
+            if(!lat||!lng) return;
+
+            L.marker([lat,lng],{icon:iconPersemaian}).addTo(layerPersemaian);
+        });
+    }
+
+    if(type==="pegawai"){
+        data.forEach(r=>{
+            const lat = toFloat(r["latitude"]);
+            const lng = toFloat(r["longitude"]);
+            if(!lat||!lng) return;
+
+            L.marker([lat,lng],{icon:iconPegawai}).addTo(layerPegawai);
+        });
+    }
+
+    if(type==="jumat"){
+        data.forEach(r=>{
+            const lat = toFloat(r["Titik Koordinat (Y)"]);
+            const lng = toFloat(r["Titik Koordinat (x)"]);
+            if(!lat||!lng) return;
+
+            L.marker([lat,lng],{icon:iconJumat}).addTo(layerJumat);
+        });
+    }
+}
+
+// ================= UPDATE CHART =================
+function updateChart(){
+    renderChart("chart1",countData(filterData(DATA.pjl)),"PJL");
+    renderChart("chart2",countData(filterData(DATA.persemaian)),"Persemaian");
+    renderChart("chart3",countData(filterData(DATA.pegawai)),"Pegawai");
+    renderChart("chart4",countData(filterData(DATA.jumat)),"Jumat");
+}
+
+// ================= POLYGON =================
 fetch("Jawa Barattt.geojson")
 .then(res=>res.json())
 .then(data=>{
     geoKab = L.geoJSON(data,{
-        style:{
-            color:"black",
-            weight:1,
-            fillOpacity:0 // 🔥 no fill
-        },
+        style:{color:"black",weight:1,fillOpacity:0},
         onEachFeature:(f,l)=>{
             l.on("click",()=>{
-                FILTER.kabupaten = f.properties.KAB_KOTA;
-                refreshMapAndChart();
+                FILTER.kab = f.properties.KAB_KOTA;
+                applyFilter();
             });
         }
     }).addTo(map);
 });
 
-// ================= AUTO UPDATE =================
+// ================= INIT =================
 setTimeout(()=>{
-    updateStatFixed();
-},3000);
+    populateDropdown();
+    updateChart();
+},4000);
     
 </script>
 </body>
