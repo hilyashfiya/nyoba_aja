@@ -8,17 +8,11 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 html,body{margin:0;padding:0;}
 #map{height:100vh;}
-
-.leaflet-div-icon{
-background:transparent!important;
-border:none!important;
-}
 
 .title{
 position:absolute;top:10px;left:50%;
@@ -38,27 +32,18 @@ box-shadow:0 2px 10px rgba(0,0,0,0.2);
 max-height:80vh;overflow:auto;
 }
 
-.panel{right:10px;width:300px;}
+.panel{right:10px;width:280px;}
 .filter{left:10px;width:260px;}
-
-.legend{
-position:absolute;
-bottom:20px;left:10px;
-background:white;padding:10px;
-border-radius:8px;
-z-index:999;
-box-shadow:0 2px 10px rgba(0,0,0,0.2);
-cursor:pointer;
-}
-
-.legend.hide{height:20px;overflow:hidden;}
 
 canvas{
 width:100%!important;
-height:200px!important;
+height:160px!important;
 }
 
-label{font-size:13px;}
+.popup{
+font-size:13px;
+line-height:1.4;
+}
 </style>
 </head>
 
@@ -67,38 +52,25 @@ label{font-size:13px;}
 <div class="title">Monitoring Domisili Pegawai dan Program Unggulan Tahun 2026</div>
 <div id="map"></div>
 
-<!-- FILTER -->
 <div class="filter">
-<b>Filter Data</b><br><br>
+<b>Filter</b><br><br>
 
-<b>CDK Wilayah</b><br>
+CDK<br>
 <select id="f_cdk">
-<option value="">Semua CDK</option>
-<option value="CDK WILAYAH I">CDK WILAYAH I</option>
-<option value="CDK WILAYAH II">CDK WILAYAH II</option>
-<option value="CDK WILAYAH III">CDK WILAYAH III</option>
-<option value="CDK WILAYAH IV">CDK WILAYAH IV</option>
-<option value="CDK WILAYAH V">CDK WILAYAH V</option>
-<option value="CDK WILAYAH VI">CDK WILAYAH VI</option>
-<option value="CDK WILAYAH VII">CDK WILAYAH VII</option>
-<option value="CDK WILAYAH VIII">CDK WILAYAH VIII</option>
-<option value="CDK WILAYAH IX">CDK WILAYAH IX</option>
+<option value="">Semua</option>
+<option>CDK WILAYAH I</option>
+<option>CDK WILAYAH II</option>
+<option>CDK WILAYAH III</option>
+<option>CDK WILAYAH IV</option>
+<option>CDK WILAYAH V</option>
+<option>CDK WILAYAH VI</option>
+<option>CDK WILAYAH VII</option>
+<option>CDK WILAYAH VIII</option>
+<option>CDK WILAYAH IX</option>
 </select><br><br>
 
-<b>Unit Kerja Pegawai</b><br>
-<select id="f_unitPegawai"><option value="">Semua Unit Kerja</option></select><br>
-
-<b>Kabupaten</b><br>
-<select id="f_kab"><option value="">Semua</option></select><br>
-
-<b>Status Persemaian</b><br>
-<select id="f_status"><option value="">Semua Status</option></select><br>
-
-<b>Kawasan</b><br>
-<select id="f_kawasan"><option value="">Semua</option></select><br>
-
-<b>Penyuluh</b><br>
-<select id="f_penyuluh"><option value="">Semua</option></select><br>
+Unit Pegawai<br>
+<select id="f_unitPegawai"><option value="">Semua</option></select>
 </div>
 
 <div class="panel">
@@ -107,568 +79,153 @@ label{font-size:13px;}
 <canvas id="c2"></canvas>
 <canvas id="c3"></canvas>
 <canvas id="c4"></canvas>
-<canvas id="c5"></canvas>
-</div>
-
-<div class="legend">
-<b>Legenda</b><br>
-
-🧑‍🌾 Petugas Jaga Leuweung<br>
-🌱 Lokasi Persemaian<br>
-🧑‍💼 Pegawai<br>
-📍 Jumat Menanam<br><br>
-
-<label><input type="checkbox" id="l_pjl" checked> PJL</label><br>
-<label><input type="checkbox" id="l_per" checked> Persemaian</label><br>
-<label><input type="checkbox" id="l_peg" checked> Pegawai</label><br>
-<label><input type="checkbox" id="l_jum" checked> Jumat</label>
 </div>
 
 <script>
 
-// ================= BASEMAP =================
+// ================= MAP =================
+const map=L.map('map',{center:[-6.9,107.6],zoom:8});
 
-// OSM
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'© OpenStreetMap'
-});
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}');
+const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+const topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png');
 
-// ESRI World Street
-const esri = L.tileLayer(
-'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{
-    attribution:'Tiles © Esri'
-});
+L.control.layers({OSM:osm,Esri:esri,Satelit:sat,Medan:topo}).addTo(map);
 
-// SATELIT (ESRI)
-const satelit = L.tileLayer(
-'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
-    attribution:'Tiles © Esri'
-});
+// ================= ICON =================
+const icon=e=>L.divIcon({html:e,className:""});
+const iPJL=icon("🧑‍🌾"), iPer=icon("🌱"), iPeg=icon("🧑‍💼"), iJum=icon("📍");
 
-// MEDAN (Topografi)
-const medan = L.tileLayer(
-'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{
-    attribution:'© OpenTopoMap'
-});
+// ================= LAYER =================
+const Lpjl=L.layerGroup().addTo(map);
+const Lper=L.layerGroup().addTo(map);
+const Lpeg=L.layerGroup().addTo(map);
+const Ljum=L.layerGroup().addTo(map);
 
-// MAP INIT
-const map = L.map('map',{
-    center:[-6.9,107.6],
-    zoom:8,
-    layers:[osm] // default
-});
+// ================= DATA =================
+let DATA={pjl:[],per:[],peg:[],jum:[]};
+let FILTER={};
 
-// CONTROL PILIH BASEMAP
-const baseMaps = {
-    "OSM": osm,
-    "Esri": esri,
-    "Satelit": satelit,
-    "Medan": medan
-};
-
-L.control.layers(baseMaps,null,{position:'topright'}).addTo(map);
-
-
-// ICON
-function createIcon(e){
-return L.divIcon({html:`<div>${e}</div>`,className:""});
-}
-
-let iconPJL=createIcon("🧑‍🌾");
-let iconPer=createIcon("🌱");
-let iconPeg=createIcon("🧑‍💼");
-let iconJum=createIcon("📍");
-
-// LAYER
-const layerPJL=L.layerGroup().addTo(map);
-const layerPer=L.layerGroup().addTo(map);
-const layerPeg=L.layerGroup().addTo(map);
-const layerJum=L.layerGroup().addTo(map);
-
-// ================= TOGGLE LAYER =================
-document.getElementById("l_pjl").onchange = e=>{
-if(e.target.checked) map.addLayer(layerPJL);
-else map.removeLayer(layerPJL);
-};
-
-document.getElementById("l_per").onchange = e=>{
-if(e.target.checked) map.addLayer(layerPer);
-else map.removeLayer(layerPer);
-};
-
-document.getElementById("l_peg").onchange = e=>{
-if(e.target.checked) map.addLayer(layerPeg);
-else map.removeLayer(layerPeg);
-};
-
-document.getElementById("l_jum").onchange = e=>{
-if(e.target.checked) map.addLayer(layerJum);
-else map.removeLayer(layerJum);
-};
-
-// DATA
-let DATA={pjl:[],persemaian:[],pegawai:[],jumat:[]};
-let FILTER={cdk:"",pegawai:"",kab:"",status:"",kawasan:"",penyuluh:""};
-let batasKabupaten = null;
-let geoReady = false;
-
-// HELPER
-function getKabupaten(lat, lng){
-
-    if(!batasKabupaten) return "";
-
-    let pt = turf.point([lng, lat]);
-
-    for(let f of batasKabupaten.features){
-        if(turf.booleanPointInPolygon(pt, f)){
-            return f.properties.KAB_KOTA || "Tidak diketahui";
-        }
-    }
-
-    return "Di luar Jawa Barat";
-}
+// ================= HELPER =================
 const f=v=>{
-if(!v) return null;
-let num=parseFloat(v.toString().replace(",","."));
-return isNaN(num)?null:num;
+if(!v)return null;
+let n=parseFloat(v.toString().replace(",","."));
+return isNaN(n)?null:n;
 };
 
-function getCDK(val){
-if(!val) return "";
-let m=val.toUpperCase().match(/CDK\s*WILAYAH\s*(I|II|III|IV|V|VI|VII|VIII|IX)/);
-return m?"CDK WILAYAH "+m[1]:"";
+const safe=v=>v||"Data tidak tersedia";
+
+function coord(r){
+let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"])||f(r["Titik Koordinat Penanaman (Y)"]);
+let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"])||f(r["Titik Koordinat Penanaman (X)"]);
+if(!lat||!lng)return null;
+return [lat,lng];
 }
 
-// ================= STATE LOADING (ANTI DROPDOWN KOSONG & LAG) =================
-let totalCSV = 1 /*pegawai*/ + 9 /*persemaian*/ + 9 /*pjl*/ + 1 /*jumat*/;
-let loadedCSV = 0;
-
-// ================= HELPER TAMBAHAN =================
-const safe=v=>v||"-";
-
-// ✅ TAMBAHKAN DI SINI
-function safeFull(v){
-return (v===undefined || v===null || v==="") ? "Data tidak tersedia" : v;
+function gmaps(lat,lng){
+return `<br><a target="_blank" href="https://www.google.com/maps?q=${lat},${lng}">📍 Buka Google Maps</a>`;
 }
 
-function gabungKoordinat(x,y){
-if(!x || !y) return "Data tidak tersedia";
-return `${x} , ${y}`;
-}
-
-function linkifyFull(url,label){
-if(!url || url==="Data tidak tersedia") return "Data tidak tersedia";
-return `<a href="${url}" target="_blank">${label}</a>`;
-}
-
-function mapsLink(lat,lng){
-if(!lat || !lng) return "";
-return `<br><a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">📍 Buka di Google Maps</a>`;
-}
-
-// ================= FILTER APPLY (REAL-TIME) =================
+// ================= FILTER =================
 function applyFilter(){
-FILTER.cdk=document.getElementById("f_cdk").value;
-FILTER.pegawai=document.getElementById("f_unitPegawai").value;
-FILTER.kab=f_kab.value;
-FILTER.status=f_status.value;
-FILTER.kawasan=f_kawasan.value;
-FILTER.penyuluh=f_penyuluh.value;
+FILTER.cdk=f_cdk.value;
+FILTER.unit=f_unitPegawai.value;
 render();
 }
-
-// auto trigger saat dropdown berubah
-document.querySelectorAll("select").forEach(s=>{
-s.addEventListener("change",applyFilter);
-});
-
-// ================= PASS FILTER (LOGIC UTAMA) =================
+document.querySelectorAll("select").forEach(s=>s.onchange=applyFilter);
 
 function pass(r,type){
-
-// 🔥 PRIORITAS FILTER
-if(FILTER.pegawai && type!=="pegawai") return false;
-if(FILTER.cdk && type==="pegawai") return false;
-
-let unit=(r["Unit Kerja"]||"").trim();
-let cdkData=getCDK(unit);
-
-// CDK harus EXACT (bukan includes)
-if(FILTER.cdk){
-if(cdkData !== FILTER.cdk) return false;
-}
-
-// KAB
-if(FILTER.kab && r._kab!==FILTER.kab) return false;
-
-// FILTER PEGAWAI
-if(type==="pegawai" && FILTER.pegawai){
-if(unit!==FILTER.pegawai) return false;
-}
-
-// STATUS PERSEMAIAN
-if(FILTER.status){
-if(type!=="persemaian") return false;
-if((r["Status Persemaian"]||"").toLowerCase()!==FILTER.status.toLowerCase()) return false;
-}
-
-// KAWASAN
-if(FILTER.kawasan){
-if(type!=="pjl") return false;
-if((r["Kawasan Leuweung/ Gunung"]||"")!==FILTER.kawasan) return false;
-}
-
-// PENYULUH
-if(FILTER.penyuluh){
-if(type!=="pjl") return false;
-if((r["Penyuluh Kehutanan"]||"")!==FILTER.penyuluh) return false;
-}
-
+let u=(r["Unit Kerja"]||"");
+if(FILTER.cdk && !u.includes(FILTER.cdk)) return false;
+if(type==="peg" && FILTER.unit && u!==FILTER.unit) return false;
 return true;
 }
 
-function checkReady(){
-    if(loadedCSV === totalCSV && geoReady){
-
-        // 🔥 assign kabupaten SETELAH semua siap
-        Object.values(DATA).flat().forEach(r=>{
-            if(r._lat && r._lng){
-                r._kab = getKabupaten(r._lat, r._lng);
-            }
-        });
-
-        fillDropdown();
-        render();
-    }
-}
-
-// ================= LOAD GEOJSON =================
-fetch("Jawa Barattt.geojson")
-.then(res => res.json())
-.then(data => {
-    batasKabupaten = data;
-    geoReady = true;
-
-    // tampilkan batas wilayah (opsional)
-    L.geoJSON(batasKabupaten,{
-        style:{color:"#555",weight:1,fillOpacity:0}
-    }).addTo(map);
-
-    checkReady();
-});
-
-// ================= LOAD CSV =================
-function loadCSV(url,type){
-Papa.parse(url,{
-download:true,
-header:true,
-skipEmptyLines:true,
-complete:res=>{
-
-res.data.forEach(r=>{
-let lat = r["latitude"]!==undefined && r["latitude"]!=="" 
-? f(r["latitude"]) 
-: f(r["Titik Koordinat (Y)"]);
-
-let lng = r["longitude"]!==undefined && r["longitude"]!=="" 
-? f(r["longitude"]) 
-: f(r["Titik Koordinat (x)"]);
-
-if(lat && lng){
-    r._lat = lat;
-    r._lng = lng;
-}
-});
-
-DATA[type]=DATA[type].concat(res.data);
-
-loadedCSV++;
-
-// 🔥 TAMBAHKAN INI
-checkReady();
-
-}
-});
-}
-
-// ================= DROPDOWN DINAMIS =================
-function fillDropdown(){
-
-// ===== UNIT KERJA PEGAWAI =====
-let pegSelect=document.getElementById("f_unitPegawai");
-pegSelect.innerHTML='<option value="">Semua Unit Kerja</option>';
-
-let unitList=[...new Set(
-DATA.pegawai
-.map(x=>(x["Unit Kerja"]||"").trim())
-.filter(x=>x!=="")
-)];
-
-unitList.sort();
-
-unitList.forEach(u=>{
-pegSelect.innerHTML+=`<option value="${u}">${u}</option>`;
-});
-
-// ===== STATUS PERSEMAIAN =====
-f_status.innerHTML='<option value="">Semua Status</option>';
-
-let statusList=[...new Set(
-DATA.persemaian
-.map(x=>(x["Status Persemaian"]||"").trim())
-.filter(x=>x!=="")
-)];
-
-statusList.sort();
-
-statusList.forEach(s=>{
-f_status.innerHTML+=`<option value="${s}">${s}</option>`;
-});
-
-// ===== KAB =====
-f_kab.innerHTML='<option value="">Semua</option>';
-
-let kabList=[...new Set(
-Object.values(DATA).flat().map(x=>x._kab).filter(x=>x)
-)];
-
-kabList.sort();
-
-kabList.forEach(k=>{
-f_kab.innerHTML+=`<option>${k}</option>`;
-});
-
-// ===== KAWASAN =====
-f_kawasan.innerHTML='<option value="">Semua</option>';
-
-let kawasanList=[...new Set(
-DATA.pjl
-.map(x=>(x["Kawasan Leuweung/ Gunung"]||"").trim())
-.filter(x=>x!=="")
-)];
-
-kawasanList.sort();
-
-kawasanList.forEach(v=>{
-f_kawasan.innerHTML+=`<option>${v}</option>`;
-});
-
-// ===== PENYULUH =====
-f_penyuluh.innerHTML='<option value="">Semua</option>';
-
-let penyuluhList=[...new Set(
-DATA.pjl
-.map(x=>(x["Penyuluh Kehutanan"]||"").trim())
-.filter(x=>x!=="")
-)];
-
-penyuluhList.sort();
-
-penyuluhList.forEach(v=>{
-f_penyuluh.innerHTML+=`<option>${v}</option>`;
-});
-
-// 🔥 TAMBAHKAN INI
-} // <-- penutup function fillDropdown()
-
-// ================= RENDER (ANTI LAG) =================
-let renderTimeout;
-
+// ================= RENDER =================
 function render(){
 
-clearTimeout(renderTimeout);
+Lpjl.clearLayers(); Lper.clearLayers();
+Lpeg.clearLayers(); Ljum.clearLayers();
 
-renderTimeout=setTimeout(()=>{
-
-layerPJL.clearLayers();
-layerPer.clearLayers();
-layerPeg.clearLayers();
-layerJum.clearLayers();
-
-// ================= PJL =================
+// PJL
 DATA.pjl.forEach(r=>{
-if(!pass(r,"pjl")) return;
+if(!pass(r,"pjl"))return;
+let c=coord(r); if(!c)return;
 
-let lat=f(r["Titik Koordinat Penanaman (Y)"]);
-let lng=f(r["Titik Koordinat Penanaman (X)"]);
-
-if(!lat || !lng) return;
-if(isNaN(lat)||isNaN(lng)) return;
-
-L.marker([lat,lng],{icon:iconPJL})
+L.marker(c,{icon:iPJL})
 .bindPopup(`
 <div class="popup">
-
 <b>🧑‍🌾 PETUGAS JAGA LEUWEUNG</b><hr>
-
-<b>Unit Kerja:</b><br>${safeFull(r["Unit Kerja"])}<br>
-<b>Nama Lengkap:</b><br>${safeFull(r["Nama Lengkap"])}<br>
-
-<b>Kawasan Leuweung / Gunung:</b><br>
-${safeFull(r["Kawasan Leuweung/ Gunung"])}<br>
-
-<b>Titik Koordinat Penanaman:</b><br>
-${gabungKoordinat(r["Titik Koordinat Penanaman (X)"], r["Titik Koordinat Penanaman (Y)"])}<br>
-
-<b>Titik Koordinat Persemaian:</b><br>
-${gabungKoordinat(r["Titik Koordinat Persemaian (X)"], r["Titik Koordinat Persemaian (Y)"])}<br>
-
-<b>Pemangku Penanaman / Pemilik Lahan:</b><br>
-${safeFull(r["Pemangku Penanaman/ Pemilik Lahan"])}<br>
-
-<b>Wilayah Binaan Kuncen:</b><br>
-${safeFull(r["Wilayah Binaan Kuncen"])}<br>
-
-<b>Wilayah Binaan Jaga Leuweung:</b><br>
-${safeFull(r["Wilayah Binaan Jaga Leuweung"])}<br>
-
-<b>Penyuluh Kehutanan:</b><br>
-${safeFull(r["Penyuluh Kehutanan"])}<br>
-
-<b>Pengendali Ekosistem Hutan (PEH):</b><br>
-${safeFull(r["Pengendali Ekosistem Hutan (PEH)"])}<br>
-
-<hr>
-<b>Dokumen:</b><br>
-BA: ${linkifyFull(r["Upload Link BA Jaga Leuweung (Validasi, surat pengantar desa, dll.)"],"Lihat Dokumen")}<br>
-SK: ${linkifyFull(r["Upload Link SK Penetapan / Penerima Manfaat Jaga Leuweung"],"Lihat Dokumen")}
-
-<hr>
-${mapsLink(lat,lng)}
-
+<b>Nama:</b> ${safe(r["Nama Lengkap"])}<br>
+<b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+<b>Kawasan:</b> ${safe(r["Kawasan Leuweung/ Gunung"])}<br>
+<b>Penyuluh:</b> ${safe(r["Penyuluh Kehutanan"])}<br>
+${gmaps(c[0],c[1])}
 </div>
 `)
-.addTo(layerPJL);
+.addTo(Lpjl);
 });
 
-// ================= PERSEMAIAN =================
-DATA.persemaian.forEach(r=>{
-if(!pass(r,"persemaian")) return;
+// PERSEMAIAN
+DATA.per.forEach(r=>{
+if(!pass(r,"per"))return;
+let c=coord(r); if(!c)return;
 
-let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"]);
-let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"]);
-
-if(!lat || !lng) return;
-
-L.marker([lat,lng],{icon:iconPer})
+L.marker(c,{icon:iPer})
 .bindPopup(`
 <div class="popup">
-
-<b>🌱 PERSEMAIAN JAGA LEUWEUNG</b><hr>
-
-<b>Unit Kerja:</b><br>${safeFull(r["Unit Kerja"])}<br>
-
-<b>Kecamatan:</b><br>${safeFull(r["Kecamatan"])}<br>
-<b>Desa/Kelurahan:</b><br>${safeFull(r["Desa/Kelurahan"])}<br>
-<b>Blok:</b><br>${safeFull(r["Blok"])}<br>
-
-<b>Nama Personil Jaga Leuweung:</b><br>
-${safeFull(r["Nama Personil Jaga Leuweung"])}<br>
-
-<b>Status Persemaian:</b><br>${safeFull(r["Status Persemaian"])}<br>
-<b>Tahapan Kegiatan:</b><br>${safeFull(r["Tahapan Kegiatan"])}<br>
-
-<b>Luas (Ha):</b><br>${safeFull(r["Luas (Ha)"])}<br>
-<b>Target Bibit:</b><br>${safeFull(r["Target Bibit"])}<br>
-<b>Realisasi Bibit:</b><br>${safeFull(r["Realisasi Bibit"])}<br>
-
-<b>Koordinat:</b><br>
-${gabungKoordinat(lat,lng)}<br>
-
-<b>Keterangan:</b><br>
-${safeFull(r["Keterangan"])}
-
-<hr>
-${mapsLink(lat,lng)}
-
+<b>🌱 PERSEMAIAN</b><hr>
+<b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
+<b>Status:</b> ${safe(r["Status Persemaian"])}<br>
+<b>Luas:</b> ${safe(r["Luas (Ha)"])} Ha<br>
+<b>Target:</b> ${safe(r["Target Bibit"])}<br>
+<b>Realisasi:</b> ${safe(r["Realisasi Bibit"])}<br>
+${gmaps(c[0],c[1])}
 </div>
 `)
-.addTo(layerPer);
+.addTo(Lper);
 });
 
-// ================= PEGAWAI =================
-DATA.pegawai.forEach(r=>{
-if(!pass(r,"pegawai")) return;
+// PEGAWAI
+DATA.peg.forEach(r=>{
+if(!pass(r,"peg"))return;
+let c=coord(r); if(!c)return;
 
-let lat=f(r["latitude"])||f(r["Titik Koordinat (Y)"]);
-let lng=f(r["longitude"])||f(r["Titik Koordinat (x)"]);
-
-if(!lat || !lng) return;
-
-L.marker([lat,lng],{icon:iconPeg})
+L.marker(c,{icon:iPeg})
 .bindPopup(`
 <div class="popup">
-
-<b>🧑‍💼 PEGAWAI DINAS KEHUTANAN</b><hr>
-
-<b>Nama:</b><br>${safeFull(r["Nama"])}<br>
-
-<b>Unit Kerja:</b><br>${safeFull(r["Unit Kerja"])}<br>
-
-<b>Nama Jabatan:</b><br>${safeFull(r["Nama Jabatan"])}<br>
-
-<b>Alamat:</b><br>${safeFull(r["Alamat"])}<br>
-
-<b>Koordinat:</b><br>
-${gabungKoordinat(lat,lng)}
-
-<hr>
-${mapsLink(lat,lng)}
-
+<b>🧑‍💼 PEGAWAI</b><hr>
+<b>Nama:</b> ${safe(r["Nama"])}<br>
+<b>Unit:</b> ${safe(r["Unit Kerja"])}<br>
+<b>Jabatan:</b> ${safe(r["Nama Jabatan"])}<br>
+<b>Alamat:</b> ${safe(r["Alamat"])}<br>
+${gmaps(c[0],c[1])}
 </div>
 `)
-.addTo(layerPeg);
+.addTo(Lpeg);
 });
 
-// ================= JUMAT =================
-DATA.jumat.forEach(r=>{
-if(!pass(r,"jumat")) return;
+// JUMAT
+DATA.jum.forEach(r=>{
+if(!pass(r,"jum"))return;
+let c=coord(r); if(!c)return;
 
-let lat=f(r["Titik Koordinat (Y)"]);
-let lng=f(r["Titik Koordinat (x)"]);
-
-if(!lat || !lng) return;
-
-L.marker([lat,lng],{icon:iconJum})
+L.marker(c,{icon:iJum})
 .bindPopup(`
 <div class="popup">
-
-<b>📍 LOKASI UNGGULAN JUM'AT MENANAM</b><hr>
-
-<b>Unit Kerja:</b><br>${safeFull(r["Unit Kerja"])}<br>
-
-<b>Kabupaten/Kota:</b><br>${safeFull(r["Kabupaten/Kota"])}<br>
-<b>Kecamatan:</b><br>${safeFull(r["Kecamatan"])}<br>
-<b>Desa/Kelurahan:</b><br>${safeFull(r["Desa/Kelurahan"])}<br>
-<b>Blok:</b><br>${safeFull(r["Blok"])}<br>
-
-<b>DAS:</b><br>${safeFull(r["DAS"])}<br>
-<b>Sub DAS:</b><br>${safeFull(r["Sub DAS"])}<br>
-
-<b>Koordinat:</b><br>
-${gabungKoordinat(r["Titik Koordinat (x)"], r["Titik Koordinat (Y)"])}<br>
-
-<b>Luas Rencana Penanaman (Ha):</b><br>
-${safeFull(r["Luas Rencana Penanaman (Ha)"])}<br>
-
-<b>Panjang Rencana Penanaman (Km):</b><br>
-${safeFull(r["Panjang Rencana Penanaman (Km)"])}<br>
-
-<b>Keterangan:</b><br>
-${safeFull(r["Keterangan"])}
-
-<hr>
-${mapsLink(lat,lng)}
-
+<b>📍 JUMAT MENANAM</b><hr>
+<b>Desa:</b> ${safe(r["Desa/Kelurahan"])}<br>
+<b>Kecamatan:</b> ${safe(r["Kecamatan"])}<br>
+<b>Kabupaten:</b> ${safe(r["Kabupaten/Kota"])}<br>
+<b>Luas:</b> ${safe(r["Luas Rencana Penanaman (Ha)"])} Ha<br>
+${gmaps(c[0],c[1])}
 </div>
 `)
-.addTo(layerJum);
+.addTo(Ljum);
 });
 
-// ================= UPDATE CHART =================
 updateChart();
-
-},100);
 }
 
 // ================= CHART =================
@@ -679,100 +236,66 @@ function updateChart(){
 charts.forEach(c=>c.destroy());
 charts=[];
 
-// ===== helper buat chart =====
-function make(id,data,title){
-
-if(Object.keys(data).length===0) return;
-
+function make(id,data){
 charts.push(new Chart(document.getElementById(id),{
 type:'doughnut',
-data:{
-labels:Object.keys(data),
-datasets:[{
-data:Object.values(data)
-}]
-},
-options:{
-responsive:true,
-maintainAspectRatio:false,
-cutout:"50%",
-plugins:{
-legend:{display:false},
-title:{display:true,text:title}
-},
-onClick:(evt,el)=>{
-if(el.length>0){
-let i=el[0].index;
-let label=Object.keys(data)[i];
-let val=Object.values(data)[i];
-alert(`${title}\n\n${label}: ${val} data`);
-}
-}
-}
+data:{labels:Object.keys(data),datasets:[{data:Object.values(data)}]},
+options:{responsive:true,aspectRatio:1,cutout:"40%"}
 }));
 }
-function countUnit(arr,type){
+
+function count(arr){
 let c={};
 arr.forEach(r=>{
-if(!pass(r,type)) return;
-
-let u=(r["Unit Kerja"]||"Tidak diketahui").trim();
+if(!pass(r))return;
+let u=r["Unit Kerja"]||"Unknown";
 c[u]=(c[u]||0)+1;
 });
 return c;
 }
-// ===== RENDER CHART =====
-make("c1",countUnit(DATA.pjl,"pjl"),"PJL per Unit");
-make("c2",countUnit(DATA.persemaian,"persemaian"),"Persemaian per Unit");
-make("c3",countUnit(DATA.jumat,"jumat"),"Jumat Menanam");
-make("c4",countUnit(DATA.pegawai,"pegawai"),"Pegawai per Unit");
-if(FILTER.kab){
 
-let total = 
-DATA.pjl.filter(r=>pass(r,"pjl")).length +
-DATA.persemaian.filter(r=>pass(r,"persemaian")).length +
-DATA.pegawai.filter(r=>pass(r,"pegawai")).length +
-DATA.jumat.filter(r=>pass(r,"jumat")).length;
-
-make("c5",{Total:total},"");
-
-}else{
-charts = charts.filter(c=>{
-if(c.canvas.id==="c5"){
-c.destroy();
-return false;
+make("c1",count(DATA.pjl));
+make("c2",count(DATA.per));
+make("c3",count(DATA.peg));
+make("c4",count(DATA.jum));
 }
-return true;
+
+// ================= LOAD =================
+function load(url,key){
+Papa.parse(url,{
+download:true,
+header:true,
+complete:r=>{
+DATA[key]=DATA[key].concat(r.data);
+fillDropdown();
+render();
+}
 });
 }
 
+function fillDropdown(){
+let s=f_unitPegawai;
+s.innerHTML='<option value="">Semua</option>';
+[...new Set(DATA.peg.map(x=>x["Unit Kerja"]))].forEach(v=>{
+if(v)s.innerHTML+=`<option>${v}</option>`;
+});
+}
 
-// ================= LOAD DATA =================
+// ================= URL =================
 
 // PJL
 ["1107501735","1715712076","1053237933","1784821909","946859661","96096761","1779255843","635466960","360434997"]
-.forEach(g=>loadCSV(
-`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&single=true&output=csv`
-,"pjl"));
+.forEach(g=>load(`https://docs.google.com/spreadsheets/d/e/2PACX-1vSPguLQCl8rp7VcrnOK0T_PGisuk-L-fQIKv1dpt5cO3LiN6MWoZ91RI50fhZd-KnXXa5yiOwkd2ezF/pub?gid=${g}&output=csv`,"pjl"));
 
-// PERSEMAIAN
+// PER
 ["1149553688","1364517698","144675684","1843729244","1981250821","1159710704","1142124495","420074128","1536834083"]
-.forEach(g=>loadCSV(
-`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&single=true&output=csv`
-,"persemaian"));
+.forEach(g=>load(`https://docs.google.com/spreadsheets/d/e/2PACX-1vS5Zmpk0bJdGg7tyvKH2RFZk-aD40ZaSMVvjSAHIiQT7jt6hqCYIHqURIjtEQx5jENQ8NvsuV3MlTtg/pub?gid=${g}&output=csv`,"per"));
 
-// PEGAWAI
-loadCSV(
-"https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&single=true&output=csv",
-"pegawai"
-);
+// PEG
+load("https://docs.google.com/spreadsheets/d/e/2PACX-1vSEHhDs2n0UKFjZlPcM4TrWQD9alaw1esFLVxjnKAD9isJ5vbKEQwhXFGYtyp8D2g/pub?gid=738073883&output=csv","peg");
 
-// JUMAT
-loadCSV(
-"https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&single=true&output=csv",
-"jumat"
-);
-}
+// JUM
+load("https://docs.google.com/spreadsheets/d/e/2PACX-1vSPtxo38ft9es4Mt0xn1oqPJQCVmYZcmyYN1GKTUBYz8b4wRX34jbQa5odSjVLwvB-yxuUnDGAV9Pou/pub?gid=2039375183&output=csv","jum");
 
 </script>
 </body>
