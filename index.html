@@ -410,6 +410,203 @@ function getKab(lat,lng){
     return hasil;
 }
 
+// ================= FIX PARSING CDK =================
+function getCDK(val){
+    if(!val) return null;
+    const match = val.match(/CDK\s*Wilayah\s*[IVX]+/i) || val.match(/CDK\s*[IVX]+/i);
+    return match ? match[0].replace("Wilayah","").trim() : null;
+}
+
+// ================= FIX COUNT =================
+function countByUnitFixed(data, field){
+    const res = {};
+    data.forEach(d=>{
+        let val = d[field];
+
+        if(field === "Unit Kerja"){
+            const cdk = getCDK(val);
+            if(cdk) val = cdk;
+        }
+
+        if(!val || val==="") return;
+
+        res[val] = (res[val] || 0) + 1;
+    });
+    return res;
+}
+
+// ================= FIX CHART =================
+function renderChartFixed(id,data,title){
+
+    const labels = Object.keys(data);
+    const values = Object.values(data);
+
+    if(charts[id]) charts[id].destroy();
+
+    charts[id] = new Chart(document.getElementById(id),{
+        type:"pie",
+        data:{
+            labels:labels,
+            datasets:[{
+                data:values,
+                backgroundColor:generateColors(labels.length)
+            }]
+        },
+        options:{
+            plugins:{
+                legend:{display:false}, // 🔥 hilangkan tulisan bawah
+                tooltip:{
+                    callbacks:{
+                        label:(ctx)=>`${ctx.label} : ${ctx.raw}`
+                    }
+                },
+                title:{display:true,text:title}
+            },
+            onClick:(evt,elements)=>{
+                if(elements.length){
+                    const label = labels[elements[0].index];
+                    applyChartFilter(label);
+                }
+            }
+        }
+    });
+}
+
+// ================= UPDATE STAT =================
+function updateStatFixed(dataOverride=null){
+
+    const src = dataOverride || DATA;
+
+    renderChartFixed("chart1",countByUnitFixed(src.pjl,"Unit Kerja"),"PJL");
+    renderChartFixed("chart2",countByUnitFixed(src.persemaian,"Unit Kerja"),"Persemaian");
+    renderChartFixed("chart3",countByUnitFixed(src.pegawai,"Unit Kerja"),"Pegawai");
+    renderChartFixed("chart4",countByUnitFixed(src.jumat,"Unit Kerja"),"Jumat Menanam");
+}
+
+// ================= FILTER STATE =================
+let FILTER = {
+    cdk: [],
+    pegawaiUnit: [],
+    kabupaten: null,
+    penyuluh: "",
+    status: "",
+    kawasan: ""
+};
+
+// ================= FILTER UI =================
+const filterUI = L.control({position:"topright"});
+filterUI.onAdd=function(){
+    const div = L.DomUtil.create("div","legend");
+
+    div.innerHTML = `
+    <b>FILTER</b><br>
+
+    <b>CDK</b><br>
+    ${["I","II","III","IV","V","VI","VII","VIII","IX"].map(c=>
+        `<label><input type="checkbox" class="fcdk" value="CDK ${c}" checked> CDK ${c}</label><br>`
+    ).join("")}
+
+    <hr>
+
+    <b>Penyuluh</b><br>
+    <input id="fpenyuluh"><br>
+
+    <b>Status Persemaian</b><br>
+    <input id="fstatus"><br>
+
+    <b>Kawasan</b><br>
+    <input id="fkawasan"><br>
+
+    <button onclick="applyFilterFull()">Apply</button>
+    `;
+
+    return div;
+};
+filterUI.addTo(map);
+
+// ================= FILTER LOGIC =================
+function applyFilterFull(){
+
+    FILTER.cdk = [...document.querySelectorAll(".fcdk:checked")].map(e=>e.value);
+    FILTER.penyuluh = document.getElementById("fpenyuluh").value.toLowerCase();
+    FILTER.status = document.getElementById("fstatus").value.toLowerCase();
+    FILTER.kawasan = document.getElementById("fkawasan").value.toLowerCase();
+
+    refreshMapAndChart();
+}
+
+// ================= CORE FILTER =================
+function filterDataAll(data){
+
+    return data.filter(d=>{
+
+        const unit = d["Unit Kerja"] || "";
+        const cdk = getCDK(unit);
+
+        if(FILTER.cdk.length && cdk && !FILTER.cdk.includes(cdk)) return false;
+
+        const penyuluh = (d["Penyuluh Kehutanan"]||"").toLowerCase();
+        if(FILTER.penyuluh && !penyuluh.includes(FILTER.penyuluh)) return false;
+
+        const status = (d["Status Persemaian"]||"").toLowerCase();
+        if(FILTER.status && !status.includes(FILTER.status)) return false;
+
+        const kawasan = (d["Kawasan Leuweung/ Gunung"]||"").toLowerCase();
+        if(FILTER.kawasan && !kawasan.includes(FILTER.kawasan)) return false;
+
+        const lat = toFloat(d["latitude"]||d["Titik Koordinat (Y)"]||d["Titik Koordinat Penanaman (Y)"]);
+        const lng = toFloat(d["longitude"]||d["Titik Koordinat (x)"]||d["Titik Koordinat Penanaman (X)"]);
+
+        if(FILTER.kabupaten){
+            const kab = getKab(lat,lng);
+            if(kab !== FILTER.kabupaten) return false;
+        }
+
+        return true;
+    });
+}
+
+// ================= REFRESH =================
+function refreshMapAndChart(){
+
+    const pjl = filterDataAll(DATA.pjl);
+    const persemaian = filterDataAll(DATA.persemaian);
+    const pegawai = filterDataAll(DATA.pegawai);
+    const jumat = filterDataAll(DATA.jumat);
+
+    updateStatFixed({pjl,persemaian,pegawai,jumat});
+}
+
+// ================= CHART CLICK FILTER =================
+function applyChartFilter(label){
+    FILTER.cdk = [label];
+    refreshMapAndChart();
+}
+
+// ================= POLYGON STYLE =================
+fetch("Jawa Barattt.geojson")
+.then(res=>res.json())
+.then(data=>{
+    geoKab = L.geoJSON(data,{
+        style:{
+            color:"black",
+            weight:1,
+            fillOpacity:0 // 🔥 no fill
+        },
+        onEachFeature:(f,l)=>{
+            l.on("click",()=>{
+                FILTER.kabupaten = f.properties.KAB_KOTA;
+                refreshMapAndChart();
+            });
+        }
+    }).addTo(map);
+});
+
+// ================= AUTO UPDATE =================
+setTimeout(()=>{
+    updateStatFixed();
+},3000);
+    
 </script>
 </body>
 </html>
